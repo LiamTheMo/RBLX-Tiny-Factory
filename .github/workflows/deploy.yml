@@ -78,8 +78,8 @@ jobs:
           set -euo pipefail
           rojo build default.project.json --output /tmp/TinyFactoryValidation.rbxlx
           test -s /tmp/TinyFactoryValidation.rbxlx
-          rg -q "AssetCatalog" /tmp/TinyFactoryValidation.rbxlx
-          rg -q "AssetShowcaseService" /tmp/TinyFactoryValidation.rbxlx
+          grep -q "AssetCatalog" /tmp/TinyFactoryValidation.rbxlx
+          grep -q "AssetShowcaseService" /tmp/TinyFactoryValidation.rbxlx
 
   import_3d_assets:
     name: Import reusable 3D models into Roblox
