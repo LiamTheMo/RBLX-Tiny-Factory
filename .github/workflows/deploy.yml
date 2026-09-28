@@ -41,9 +41,22 @@ jobs:
           unzip -q .tools/luau.zip -d .tools/luau
           chmod +x .tools/luau/luau .tools/luau/luau-compile
 
+      - name: Validate reusable 3D GLB sources and manifest
+        shell: bash
+        run: python3 scripts/import_3d_assets.py --validate-only
+
+      - name: Test Roblox 3D import helpers
+        shell: bash
+        run: python3 -m unittest discover -s tests -p 'test_*.py'
+
       - name: Compile Luau sources and tests
         shell: bash
-        run: .tools/luau/luau-compile -t1 $(find src tests -name '*.luau' -print)
+        run: |
+          set -euo pipefail
+          if ! .tools/luau/luau-compile -t1 $(find src tests -name '*.luau' -print) > .tools/luau/compile.log 2>&1; then
+            cat .tools/luau/compile.log
+            exit 1
+          fi
 
       - name: Run all simulation and rules tests
         shell: bash
@@ -54,214 +67,63 @@ jobs:
             .tools/luau/luau "$test_file"
           done
 
-  import_personal_island:
+      - name: Set up Rokit toolchain
+        uses: CompeyDev/setup-rokit@v0.1.2
+        with:
+          version: v1.2.0
+
+      - name: Build and verify Rojo project
+        shell: bash
+        run: |
+          set -euo pipefail
+          rojo build default.project.json --output /tmp/TinyFactoryValidation.rbxlx
+          test -s /tmp/TinyFactoryValidation.rbxlx
+          rg -q "AssetCatalog" /tmp/TinyFactoryValidation.rbxlx
+          rg -q "AssetShowcaseService" /tmp/TinyFactoryValidation.rbxlx
+
+  import_3d_assets:
+    name: Import reusable 3D models into Roblox
+    needs: validate
     if: >-
       github.ref == 'refs/heads/main' &&
-      github.event_name == 'push'
-    name: Import Higgsfield GLB and Roblox Model
+      (github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' && inputs.publish == true))
     runs-on: ubuntu-latest
+    timeout-minutes: 240
     steps:
       - name: Check out main
+        id: checkout
         uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
 
-      - name: Check personal island import state
-        id: state
-        shell: bash
-        run: |
-          set -euo pipefail
-          map_path=$(jq -r '.repositoryPath' docs/assets/personal-island-source.json)
-          if test -s "$map_path"; then
-            echo "map_present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "map_present=false" >> "$GITHUB_OUTPUT"
-          fi
-          if test -s "$map_path" && grep -Eq 'AssetId = [1-9][0-9]*' src/shared/PersonalIslandAssetId.luau; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Download exact Higgsfield GLB
-        if: steps.state.outputs.map_present != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          source_url=$(jq -r '.downloadUrl' docs/assets/personal-island-source.json)
-          map_path=$(jq -r '.repositoryPath' docs/assets/personal-island-source.json)
-          mkdir -p "$(dirname "$map_path")"
-          curl --fail --location --retry 3 --silent --show-error "$source_url" \
-            --output "$map_path"
-
-      - name: Verify personal island source
-        if: steps.state.outputs.ready != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          expected_bytes=$(jq -r '.expectedBytes' docs/assets/personal-island-source.json)
-          map_path=$(jq -r '.repositoryPath' docs/assets/personal-island-source.json)
-          actual_bytes=$(stat -c '%s' "$map_path")
-          test "$actual_bytes" = "$expected_bytes" || {
-            echo "Unexpected personal island size: $actual_bytes (expected $expected_bytes)"
-            exit 1
-          }
-          sha256sum "$map_path"
-
-      - name: Commit source GLB to main
-        if: steps.state.outputs.map_present != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          map_path=$(jq -r '.repositoryPath' docs/assets/personal-island-source.json)
-          git add "$map_path"
-          if git diff --cached --quiet; then
-            echo "Personal island source already committed"
-          else
-            git commit -m "feat: add personal island source map"
-            git push origin HEAD:main
-          fi
-
-      - name: Upload GLB to Roblox Assets API
-        if: steps.state.outputs.ready != 'true'
+      - name: Upload each GLB as a reusable Roblox Model
+        if: steps.checkout.outcome == 'success'
         env:
           ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
           ROBLOX_UNIVERSE_ID: ${{ secrets.ROBLOX_UNIVERSE_ID }}
         shell: bash
-        run: |
-          set -euo pipefail
-          map_path=$(jq -r '.repositoryPath' docs/assets/personal-island-source.json)
-          test -n "$ROBLOX_API_KEY" || { echo "ROBLOX_API_KEY secret is missing"; exit 1; }
-          test -n "$ROBLOX_UNIVERSE_ID" || { echo "ROBLOX_UNIVERSE_ID secret is missing"; exit 1; }
+        run: python3 scripts/import_3d_assets.py
 
-          universe_response=$(curl --fail --silent --show-error \
-            --header "x-api-key: $ROBLOX_API_KEY" \
-            "https://apis.roblox.com/cloud/v2/universes/$ROBLOX_UNIVERSE_ID")
-          creator_group_path=$(jq -r '.group // empty' <<<"$universe_response")
-          creator_user_path=$(jq -r '.user // empty' <<<"$universe_response")
-
-          if [[ -n "$creator_group_path" && -z "$creator_user_path" ]]; then
-            creator_type="Group"
-            creator_id="${creator_group_path##*/}"
-          elif [[ -n "$creator_user_path" && -z "$creator_group_path" ]]; then
-            creator_type="User"
-            creator_id="${creator_user_path##*/}"
-          else
-            echo "Roblox Cloud universe response did not identify exactly one owner"
-            exit 1
-          fi
-          [[ "$creator_id" =~ ^[0-9]+$ ]] || { echo "Roblox universe owner ID is not numeric"; exit 1; }
-          echo "Resolved Roblox universe creator metadata: type=$creator_type id=$creator_id"
-
-          jq -en --argjson id "$creator_id" '$id > 0' >/dev/null || {
-            echo "Roblox universe creator ID must be positive"
-            exit 1
-          }
-
-          case "$creator_type" in
-            Group)
-              creator_json=$(jq -nc --argjson id "$creator_id" '{groupId: $id}')
-              ;;
-            User)
-              creator_json=$(jq -nc --argjson id "$creator_id" '{userId: $id}')
-              ;;
-            *)
-              echo "Unexpected Roblox universe creator type: $creator_type"
-              exit 1
-              ;;
-          esac
-          echo "Resolved Roblox universe creator type: $creator_type"
-          echo "Prepared Assets API creator field: $(jq -r 'keys | join(",")' <<<"$creator_json")"
-          echo "Prepared creator ID is a positive JSON number"
-
-          request_json=$(jq -nc \
-            --arg creator "$creator_json" \
-            '{assetType:"Model", displayName:"Tiny Factory - Personal Island", description:"Higgsfield Tiny Factory personal island, revision 26.", creationContext:{creator:($creator | fromjson)}}')
-          echo "Assets API request creator shape: $(jq -c '.creationContext.creator | with_entries(.value |= type)' <<<"$request_json")"
-
-          upload_response_file=$(mktemp)
-          upload_headers_file=$(mktemp)
-          upload_http_code=$(curl --silent --show-error \
-            --dump-header "$upload_headers_file" \
-            --output "$upload_response_file" \
-            --write-out "%{http_code}" \
-            --request POST \
-            --header "x-api-key: $ROBLOX_API_KEY" \
-            --form "request=$request_json;type=application/json" \
-            --form "fileContent=@$map_path;type=model/gltf-binary" \
-            "https://apis.roblox.com/assets/v1/assets")
-          echo "Roblox asset upload HTTP $upload_http_code"
-          grep -Ei '^(HTTP/|content-type:|x-roblox|retry-after:)' "$upload_headers_file" | tr -d '\r' || true
-          response_bytes=$(wc -c < "$upload_response_file")
-          echo "Roblox response body bytes: $response_bytes"
-          if [[ "$upload_http_code" -lt 200 || "$upload_http_code" -ge 300 ]]; then
-            if [[ "$response_bytes" -gt 0 ]]; then
-              base64 -w0 "$upload_response_file"
-              echo
-            else
-              echo "Roblox returned an empty response body."
-            fi
-            exit 1
-          fi
-          operation=$(cat "$upload_response_file")
-          operation_path=$(jq -r '.path // empty' <<<"$operation")
-          test -n "$operation_path" || { echo "Roblox asset upload did not return an operation path"; exit 1; }
-
-          asset_id=""
-          for attempt in $(seq 1 30); do
-            status=$(curl --fail --silent --show-error \
-              --header "x-api-key: $ROBLOX_API_KEY" \
-              "https://apis.roblox.com/assets/v1/$operation_path")
-            if [[ $(jq -r '.done // false' <<<"$status") == "true" ]]; then
-              if jq -e '.error' >/dev/null <<<"$status"; then
-                echo "Roblox asset operation failed"
-                jq '.error' <<<"$status"
-                exit 1
-              fi
-              asset_id=$(jq -r '.response.assetId // empty' <<<"$status")
-              break
-            fi
-            sleep 10
-          done
-          test -n "$asset_id" || { echo "Roblox asset operation did not finish"; exit 1; }
-          echo "Imported Roblox Model asset ID: $asset_id"
-
-          source_sha=$(sha256sum "$map_path" | awk '{print $1}')
-          cat > src/shared/PersonalIslandAssetId.luau <<EOF
-          --!strict
-          -- Generated by .github/workflows/deploy.yml.
-          return {
-          	AssetId = $asset_id,
-          	SourceProjectId = "26b9c585-243d-4326-bb91-f48bcd5878fc",
-          	SourceRevision = 26,
-          	SourceEtag = "a25926c99bcaad87d4abd06ac976f83f",
-          	SourceSha256 = "$source_sha",
-          }
-          EOF
-          jq -n \
-            --arg assetId "$asset_id" \
-            --arg sha "$source_sha" \
-            --arg source "$(jq -r '.downloadUrl' docs/assets/personal-island-source.json)" \
-            '{assetId:$assetId|tonumber, sourceSha256:$sha, sourceUrl:$source, higgsfieldRevision:26}' \
-            > docs/assets/personal-island-roblox.json
-
-      - name: Commit Roblox asset metadata to main
-        if: steps.state.outputs.ready != 'true'
+      - name: Persist successful Roblox asset IDs to main
+        if: always() && steps.checkout.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/assets/personal-island-roblox.json src/shared/PersonalIslandAssetId.luau
-          git commit -m "feat: record personal island Roblox asset"
-          git push origin HEAD:main
+          git add docs/assets/3d-model-assets.json src/assets/Models/3D/AssetCatalog.luau
+          if git diff --cached --quiet; then
+            echo "No new Roblox asset ID checkpoints"
+          else
+            git commit -m "chore: record Roblox 3D asset IDs"
+            git push origin HEAD:main
+          fi
 
   publish:
     name: Publish validated main build
-    needs: [validate, import_personal_island]
+    needs: [validate, import_3d_assets]
     if: >-
       github.ref == 'refs/heads/main' &&
       ((github.event_name == 'workflow_dispatch' && inputs.publish == true) ||
@@ -273,6 +135,10 @@ jobs:
         with:
           ref: main
           persist-credentials: false
+
+      - name: Verify every GLB has an imported Roblox Model
+        shell: bash
+        run: python3 scripts/import_3d_assets.py --validate-only --require-imported
 
       - name: Set up Rokit toolchain
         uses: CompeyDev/setup-rokit@v0.1.2
