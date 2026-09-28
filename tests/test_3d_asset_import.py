@@ -68,7 +68,29 @@ class AssetImportTests(unittest.TestCase):
 
         self.assertIn('Key = "r1c1_grass_platform"', rendered)
         self.assertIn("AssetId = 123456", rendered)
+        self.assertIn("Pack = 1", rendered)
         self.assertIn(f'SourceSha256 = "{source_hash}"', rendered)
+
+    def test_pack_prefix_is_omitted_from_display_name_and_catalog_key_is_unique(self):
+        source_hash = "d" * 64
+        rendered = import_3d_assets.render_catalog(
+            [
+                {
+                    "key": "s2_r1c1_curving_peninsula_terrain",
+                    "displayName": import_3d_assets.display_name("s2_r1c1_curving_peninsula_terrain"),
+                    "file": "s2_r1c1_curving_peninsula_terrain.glb",
+                    "assetId": 0,
+                    "pack": 2,
+                    "row": 1,
+                    "column": 1,
+                    "sourceSha256": source_hash,
+                }
+            ]
+        )
+
+        self.assertEqual(import_3d_assets.display_name("s2_r1c1_curving_peninsula_terrain"), "Curving Peninsula Terrain")
+        self.assertIn('Key = "s2_r1c1_curving_peninsula_terrain"', rendered)
+        self.assertIn("Pack = 2", rendered)
 
     def test_import_saves_operation_checkpoint_and_reusable_model_id(self):
         source_hash = "b" * 64

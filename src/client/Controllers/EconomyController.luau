@@ -2,6 +2,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local MachineDefinitions = require(Shared:WaitForChild("MachineDefinitions"))
@@ -200,35 +201,49 @@ function EconomyController.start()
 		end
 	end)
 
-	local function layout(viewportWidth: number)
-		compact = viewportWidth < 600
-		panel.Size = if compact then UDim2.fromOffset(304, 194) else UDim2.fromOffset(300, 350)
-		panel.Position = if compact then UDim2.fromOffset(8, 8) else UDim2.new(1, -316, 0, 16)
+	local function layout(viewportWidth: number, viewportHeight: number)
+		compact = viewportWidth < 760 or (UserInputService.TouchEnabled and viewportWidth < 1000)
+		local compactLandscape = compact and viewportWidth > viewportHeight
+		local panelWidth = 300
+		if compact then
+			local widthRatio = if compactLandscape then 0.34 else 0.68
+			panelWidth = math.floor(math.clamp(viewportWidth * widthRatio, 232, 272))
+			panelWidth = math.min(panelWidth, math.max(184, viewportWidth - 16))
+		end
+		panel.Size = if compact then UDim2.fromOffset(panelWidth, 204) else UDim2.fromOffset(panelWidth, 350)
+		panel.Position = if compactLandscape then UDim2.fromOffset(8, 8) elseif compact then UDim2.fromOffset(8, 8) else UDim2.new(1, -316, 0, 16)
 		title.Position = UDim2.fromOffset(8, 8)
-		title.Size = UDim2.new(1, -16, 0, 26)
-		status.Position = UDim2.fromOffset(8, 36)
-		status.Size = UDim2.new(1, -16, 0, 24)
-		result.Position = UDim2.fromOffset(8, 62)
-		result.Size = UDim2.new(1, -16, 0, 24)
-		roll.Position = UDim2.fromOffset(8, 90)
-		capacity.Position = if compact then UDim2.fromOffset(158, 90) else UDim2.fromOffset(8, 130)
-		roll.Size = if compact then UDim2.fromOffset(142, 30) else UDim2.fromOffset(284, 34)
-		capacity.Size = if compact then UDim2.fromOffset(138, 30) else UDim2.fromOffset(284, 34)
-		inventoryTitle.Position = UDim2.fromOffset(8, if compact then 124 else 174)
+		title.Size = UDim2.new(1, -16, 0, if compact then 24 else 26)
+		status.Position = UDim2.fromOffset(8, if compact then 34 else 36)
+		status.Size = UDim2.new(1, -16, 0, if compact then 34 else 24)
+		result.Position = UDim2.fromOffset(8, if compact then 70 else 62)
+		result.Size = UDim2.new(1, -16, 0, if compact then 20 else 24)
+		local buttonY = if compact then 94 else 130
+		roll.Position = UDim2.fromOffset(8, if compact then 94 else 90)
+		capacity.Position = if compact
+			then UDim2.fromOffset(12 + (panelWidth - 24) / 2, buttonY)
+			else UDim2.fromOffset(8, 130)
+		roll.Size = if compact
+			then UDim2.fromOffset((panelWidth - 24) / 2, 38)
+			else UDim2.fromOffset(284, 34)
+		capacity.Size = if compact
+			then UDim2.fromOffset((panelWidth - 24) / 2, 38)
+			else UDim2.fromOffset(284, 34)
+		inventoryTitle.Position = UDim2.fromOffset(8, if compact then 138 else 174)
 		inventoryTitle.Size = UDim2.new(1, -16, 0, 18)
-		inventoryList.Position = UDim2.fromOffset(8, if compact then 142 else 196)
-		inventoryList.Size = UDim2.new(1, -16, 0, if compact then 48 else 142)
+		inventoryList.Position = UDim2.fromOffset(8, if compact then 158 else 196)
+		inventoryList.Size = UDim2.new(1, -16, 0, if compact then 38 else 142)
 		render()
 	end
 
 	local camera = workspace.CurrentCamera
 	if camera then
 		camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
-			layout(camera.ViewportSize.X)
+			layout(camera.ViewportSize.X, camera.ViewportSize.Y)
 		end)
-		layout(camera.ViewportSize.X)
+		layout(camera.ViewportSize.X, camera.ViewportSize.Y)
 	else
-		layout(1000)
+		layout(1000, 800)
 	end
 	setStatus("Production funds rolls and capacity upgrades.", nil)
 	refresh(nil)
