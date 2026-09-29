@@ -28,7 +28,7 @@ Recommended model:
 
 - a configurable three-second cooldown for the prototype
 - a bounded inventory with recycling for unwanted machines
-- rarity weights that keep common machines strategically useful
+- distinct per-machine roll chances that total 100%
 
 Exact numbers must come from playtests.
 
@@ -79,7 +79,17 @@ v1.00 only needs enough variety to prove that players notice these differences.
 
 ## 8. Rarity and Economy
 
-Rarity may influence average expected power but should not map directly to one fixed multiplier ladder.
+Every rollable machine has its own configured roll chance. The server selects from those machine-specific chances, and rarity is derived from the exact reciprocal chance; it is not assigned first and then used to group equal-probability machines.
+
+| Rarity | Reciprocal denominator |
+| --- | --- |
+| Common | 1 to 10 |
+| Uncommon | greater than 10 to 30 |
+| Rare | greater than 30 to 100 |
+| Epic | greater than 100 to 500 |
+| Legendary | greater than 500 |
+
+The configured machine chances total 100%. The current values are starting balance data and should be retuned from playtests. Rarity may influence average expected power, but should not map directly to a fixed multiplier ladder.
 
 Avoid:
 
@@ -111,7 +121,7 @@ Keep critical values in configuration:
 - processing delays
 - multipliers
 - roll cooldown and inventory cap
-- rarity weights
+- per-machine roll chances and rarity odds thresholds
 - expansion prices
 - active item caps
 
