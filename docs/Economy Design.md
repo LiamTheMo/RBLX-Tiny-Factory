@@ -106,12 +106,6 @@ Epic = ×100
 Legendary = ×1000
 
 That structure quickly makes earlier machines irrelevant.
-
-
-## 8.1 Rarity Reveal Presentation
-
-Rarity colors live beside their ordered bands in shared economy configuration. The roll animation keeps the current machine name, rarity, and reciprocal odds on one compact line. A temporary ultra-rare cutscene is triggered for denominators greater than 10,000; its duration and threshold are configurable. Studio tests can invoke its presentation event with synthetic odds to verify the UI without changing live machine weights.
-
 ## 9. Inflation Risks
 
 Watch for:
