@@ -91,9 +91,13 @@ function EconomyController.start()
 	local result = Instance.new("TextLabel")
 	result.BackgroundTransparency = 1
 	result.TextColor3 = COLORS.Accent
-	result.TextWrapped = true
+	result.TextWrapped = false
 	result.Font = Enum.Font.GothamBold
-	result.TextSize = 13
+	result.TextScaled = true
+	local resultTextLimit = Instance.new("UITextSizeConstraint")
+	resultTextLimit.MinTextSize = 8
+	resultTextLimit.MaxTextSize = 11
+	resultTextLimit.Parent = result
 	result.Parent = panel
 
 	local rollDock = Instance.new("Frame")
@@ -145,6 +149,8 @@ function EconomyController.start()
 		local remaining = math.max(0, cooldownEndAt - os.clock())
 		local ready = state ~= nil and state.DataReady == true
 		roll.Text = if rolling then "ROLLING..." elseif not ready then "FACTORY LOADING" elseif remaining > 0 then string.format("READY IN %.1fs", remaining) else "Roll"
+		roll.TextSize = if rolling then 12 else 20
+		roll.TextWrapped = false
 		roll.Active = ready and not rolling and remaining <= 0
 		roll.AutoButtonColor = roll.Active
 		roll.BackgroundColor3 = if roll.Active then COLORS.Accent else COLORS.Button
@@ -243,7 +249,7 @@ function EconomyController.start()
 			local rarity = definition and definition.Rarity or response.LastRarity or "Unknown"
 			local odds = if definition and definition.Rollable then EconomyRules.getMachineOddsLabel(definition.Id, MachineDefinitions.getRollPool()) else nil
 			local machineName = definition and definition.DisplayName or response.LastRoll or "Machine"
-			result.Text = if odds then `Rolled: {machineName} ({rarity} · {odds})` else `Rolled: {machineName} ({rarity})`
+			result.Text = if odds then `Rolled: {machineName} · {rarity} · {odds}` else `Rolled: {machineName} · {rarity}`
 			setStatus("Machine added to inventory.", true)
 			refresh(response)
 			EffectsController.play("MachineRolled", { MachineId = response.LastRoll, Rarity = response.LastRarity })
