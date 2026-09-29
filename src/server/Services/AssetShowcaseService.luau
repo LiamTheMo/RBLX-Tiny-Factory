@@ -14,7 +14,10 @@ local started = false
 local COLUMN_COUNT = 6
 local CELL_SPACING = 20
 local MAX_MODEL_EXTENT = 11
-local GRID_CENTER = Vector3.new(-70, 0, 0)
+local GRID_CENTERS = {
+	[1] = Vector3.new(-70, 0, 0),
+	[2] = Vector3.new(90, 0, 0),
+}
 local BASEPLATE_SIZE = Vector3.new(720, 4, 280)
 local BASEPLATE_CENTER = Vector3.new(140, -2, 0)
 local ASSET_LOAD_WORKERS = 3
@@ -50,7 +53,8 @@ end
 local function cellPosition(asset: any): Vector3
 	local columnOffset = (asset.Column - (COLUMN_COUNT + 1) / 2) * CELL_SPACING
 	local rowOffset = (asset.Row - (COLUMN_COUNT + 1) / 2) * CELL_SPACING
-	return GRID_CENTER + Vector3.new(columnOffset, 0, rowOffset)
+	local center = GRID_CENTERS[asset.Pack or 1] or GRID_CENTERS[1]
+	return center + Vector3.new(columnOffset, 0, rowOffset)
 end
 
 local function createLabel(parent: Instance, position: Vector3, asset: any)
@@ -80,7 +84,7 @@ local function createLabel(parent: Instance, position: Vector3, asset: any)
 	label.BorderSizePixel = 0
 	label.Size = UDim2.fromScale(1, 1)
 	label.Font = Enum.Font.GothamBold
-	label.Text = string.format("%s\nR%d · C%d", asset.DisplayName, asset.Row, asset.Column)
+	label.Text = string.format("%s\nP%d · R%d · C%d", asset.DisplayName, asset.Pack or 1, asset.Row, asset.Column)
 	label.TextColor3 = Color3.fromRGB(255, 255, 245)
 	label.TextSize = 12
 	label.TextWrapped = true

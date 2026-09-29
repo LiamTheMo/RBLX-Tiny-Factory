@@ -28,10 +28,12 @@ GLB_JSON_CHUNK = 0x4E4F534A
 GLB_BIN_CHUNK = 0x004E4942
 ASSET_API = "https://apis.roblox.com/assets/v1/"
 CLOUD_API = "https://apis.roblox.com/cloud/v2/"
-MAX_ASSET_COUNT = 36
-MAX_TOTAL_BYTES = 30_000_000
+ASSETS_PER_PACK = 36
+MAX_PACK_COUNT = 2
+MAX_ASSET_COUNT = ASSETS_PER_PACK * MAX_PACK_COUNT
+MAX_TOTAL_BYTES = 60_000_000
 MAX_FILE_BYTES = 2_000_000
-MAX_TRIANGLES = 12_000
+MAX_TRIANGLES = 13_000
 MAX_TEXTURE_DIMENSION = 1024
 POLL_ATTEMPTS = 30
 POLL_INTERVAL_SECONDS = 10
@@ -42,7 +44,8 @@ class AssetImportError(RuntimeError):
 
 
 def display_name(key: str) -> str:
-    return re.sub(r"^r[1-6]c[1-6]_", "", key).replace("_", " ").title()
+    key_without_pack = re.sub(r"^s[1-9][0-9]*_", "", key)
+    return re.sub(r"^r[1-6]c[1-6]_", "", key_without_pack).replace("_", " ").title()
 
 
 def jpeg_dimensions(data: bytes) -> tuple[int, int]:
@@ -131,16 +134,19 @@ def read_glb(path: Path) -> tuple[dict[str, Any], bytes]:
 def inspect_asset(record: dict[str, Any], source_dir: Path) -> dict[str, Any]:
     key = record.get("key")
     filename = record.get("file")
-    if not isinstance(key, str) or not re.fullmatch(r"r[1-6]c[1-6]_[a-z0-9_]+", key):
+    key_match = re.fullmatch(r"(?:s([1-9][0-9]*)_)?r([1-6])c([1-6])_[a-z0-9_]+", key) if isinstance(key, str) else None
+    if key_match is None:
         raise AssetImportError(f"invalid asset key: {key!r}")
     if not isinstance(filename, str) or Path(filename).name != filename or not filename.endswith(".glb"):
         raise AssetImportError(f"invalid GLB filename for {key}")
     if filename != f"{key}.glb":
         raise AssetImportError(f"asset key and filename do not match: {key} / {filename}")
 
-    match = re.match(r"r([1-6])c([1-6])_", key)
-    assert match is not None
-    row, column = int(match.group(1)), int(match.group(2))
+    key_pack = int(key_match.group(1) or 1)
+    pack = record.get("pack", key_pack)
+    if not isinstance(pack, int) or isinstance(pack, bool) or pack != key_pack or not 1 <= pack <= MAX_PACK_COUNT:
+        raise AssetImportError(f"reference-sheet pack does not match {key}")
+    row, column = int(key_match.group(2)), int(key_match.group(3))
     if record.get("row") != row or record.get("column") != column:
         raise AssetImportError(f"grid coordinates do not match {key}")
 
@@ -213,6 +219,7 @@ def inspect_asset(record: dict[str, Any], source_dir: Path) -> dict[str, Any]:
     return {
         "key": key,
         "file": filename,
+        "pack": pack,
         "row": row,
         "column": column,
         "displayName": display_name(key),
@@ -236,6 +243,7 @@ def render_catalog(assets: list[dict[str, Any]]) -> str:
                 f"\t\tDisplayName = {json.dumps(asset['displayName'])},",
                 f"\t\tFileName = {json.dumps(asset['file'])},",
                 f"\t\tAssetId = {asset['assetId']},",
+                f"\t\tPack = {asset.get('pack', 1)},",
                 f"\t\tRow = {asset['row']},",
                 f"\t\tColumn = {asset['column']},",
                 f"\t\tSourceSha256 = {json.dumps(asset['sourceSha256'])},",
@@ -254,22 +262,37 @@ def load_and_validate(manifest_path: Path, source_dir: Path) -> tuple[dict[str, 
     if manifest.get("schemaVersion") != 1:
         raise AssetImportError("unsupported 3D asset manifest schema")
     records = manifest.get("assets")
-    if not isinstance(records, list) or len(records) != MAX_ASSET_COUNT:
-        raise AssetImportError(f"expected exactly {MAX_ASSET_COUNT} asset records")
+    if (
+        not isinstance(records, list)
+        or not records
+        or len(records) > MAX_ASSET_COUNT
+        or len(records) % ASSETS_PER_PACK != 0
+    ):
+        raise AssetImportError(f"expected one or two complete {ASSETS_PER_PACK}-asset reference sheets")
+    if manifest.get("assetCount", len(records)) != len(records):
+        raise AssetImportError("manifest assetCount does not match its asset records")
+    pack_count = len(records) // ASSETS_PER_PACK
 
     assets = [inspect_asset(record, source_dir) for record in records]
-    assets.sort(key=lambda asset: (asset["row"], asset["column"]))
-    coordinates = {(asset["row"], asset["column"]) for asset in assets}
+    assets.sort(key=lambda asset: (asset["pack"], asset["row"], asset["column"]))
     expected_coordinates = {(row, column) for row in range(1, 7) for column in range(1, 7)}
-    if coordinates != expected_coordinates or len({asset["key"] for asset in assets}) != MAX_ASSET_COUNT:
-        raise AssetImportError("the asset set must contain every unique cell in the 6×6 grid")
+    for pack in range(1, pack_count + 1):
+        coordinates = {
+            (asset["row"], asset["column"]) for asset in assets if asset["pack"] == pack
+        }
+        if coordinates != expected_coordinates:
+            raise AssetImportError(f"asset pack {pack} must contain every cell in its 6×6 grid")
+    if {asset["pack"] for asset in assets} != set(range(1, pack_count + 1)):
+        raise AssetImportError("asset packs must be numbered consecutively starting at one")
+    if len({asset["key"] for asset in assets}) != len(assets):
+        raise AssetImportError("asset keys must be unique across all reference sheets")
     actual_files = {path.name for path in source_dir.glob("*.glb")}
     expected_files = {asset["file"] for asset in assets}
     if actual_files != expected_files:
         raise AssetImportError("the 3D asset folder and manifest do not contain the same GLB files")
     total_bytes = sum(asset["fileBytes"] for asset in assets)
     if total_bytes > MAX_TOTAL_BYTES:
-        raise AssetImportError("optimized 3D GLBs exceed the 30 MB combined source budget")
+        raise AssetImportError("optimized 3D GLBs exceed the 60 MB combined source budget")
     return manifest, assets
 
 
@@ -355,7 +378,7 @@ def create_asset(
         "displayName": f"Tiny Factory - {asset['displayName']}",
         "description": (
             "Reusable single-mesh low-poly environment model for Tiny Factory. "
-            f"6x6 reference sheet cell R{asset['row']}C{asset['column']}."
+            f"6x6 reference sheet {asset['pack']} cell R{asset['row']}C{asset['column']}."
         ),
         "creationContext": {"creator": creator},
     }
