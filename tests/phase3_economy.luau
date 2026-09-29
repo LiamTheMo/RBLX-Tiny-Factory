@@ -64,7 +64,9 @@ expect(not EconomyRules.getRarityFromOdds(0), "zero denominator should not have 
 expect(EconomyRules.getMachineOddsDenominator("FastDropper", rollPool) == 20, "machine odds denominator should follow its configured weight")
 expect(not EconomyRules.shouldPlayUltraRareCutscene(10000), "the ultra-rare cutscene should not include the exact 1/10,000 boundary")
 expect(EconomyRules.shouldPlayUltraRareCutscene(10000.01), "the ultra-rare cutscene should include odds rarer than 1/10,000")
-expect(not EconomyRules.getMachineOddsLabel("Seller", rollPool), "non-rollable machines should not have roll odds")
+expect(EconomyRules.getMachineOddsLabel("Seller", rollPool) == "1/50", "rollable seller odds should follow its configured two-percent chance")
+local sellerDefinition = MachineDefinitions.get("Seller")
+expect(sellerDefinition ~= nil and sellerDefinition.Rollable, "the seller should be part of the roll pool")
 local totalChance = 0
 for _, definition in ipairs(rollPool) do
 	totalChance += definition.RollChance
@@ -105,6 +107,10 @@ local luckBooster = assert(BoosterRules.get("Luck"))
 expect(coinBooster.Effect.Amount == 5, "Coin reward should remain config-driven")
 expect(luckBooster.Effect.DurationSeconds == 30, "Luck duration should remain config-driven")
 expect(BoosterConfig.MaxLuckDurationSeconds <= 120, "temporary Luck duration should remain capped")
+expect(BoosterConfig.LandRaycast.Distance > BoosterConfig.LandRaycast.StartHeight, "booster land ray must reach below the plot")
+expect(BoosterConfig.LandRaycast.PositionAttempts > 0 and BoosterConfig.LandRaycast.MinimumGroundNormalY > 0, "booster land search must use bounded surface checks")
+expect(BoosterConfig.Fall.DurationSeconds > 0 and BoosterConfig.Fall.LandedSize > 0, "booster fall animation must have valid timing and size")
+expect(BoosterConfig.Fall.LandingHeight >= BoosterConfig.Fall.LandedSize / 2, "booster should settle on top of a surface")
 
 local goldenizer = assert(MachineDefinitions.get("Goldenizer"))
 expect(goldenizer.Rarity == "Uncommon", "a machine at the inclusive 1/500 boundary should be Uncommon")

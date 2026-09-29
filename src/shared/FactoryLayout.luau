@@ -5,14 +5,13 @@ local FactoryLayout = {}
 export type Layout = { string? }
 
 FactoryLayout.SlotCount = 5
-FactoryLayout.EditableSlotCount = FactoryLayout.SlotCount - 1
-FactoryLayout.SellerSlotIndex = FactoryLayout.SlotCount
+FactoryLayout.EditableSlotCount = FactoryLayout.SlotCount
 
 function FactoryLayout.isEditableMachineSlot(slotIndex: any): boolean
 	return type(slotIndex) == "number"
 		and slotIndex % 1 == 0
 		and slotIndex >= 1
-		and slotIndex < FactoryLayout.SellerSlotIndex
+		and slotIndex <= FactoryLayout.SlotCount
 end
 FactoryLayout.Default = { "BasicDropper", "ValueMultiplier", nil, nil, "Seller" }
 

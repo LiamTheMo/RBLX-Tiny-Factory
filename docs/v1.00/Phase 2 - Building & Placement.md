@@ -1,97 +1,54 @@
 # Phase 2 — Building & Placement
 
 ## Objective
-Let players safely place, move, and remove machines on a deliberately constrained v1 layout. Direction stays fixed left-to-right.
 
-## Player-Facing Result
-- The temporary conveyor has four clickable machine positions followed by a fixed seller slot.
-- Players can click a physical slot before choosing inventory, or select a machine first and click its destination; the HUD remains available as a fallback.
-- The production route updates immediately.
+Let players place and rearrange owned machines on one compact, left-to-right proof-of-concept conveyor. The server remains authoritative for ownership, capacity, route validity, and simulation order.
+
+## Player-facing result
+
+- The temporary conveyor has five clickable factory areas.
+- Clicking any area opens a contextual view of owned machines that can be placed there, plus valid move and return actions.
+- A persistent Inventory button opens a complete ownership list. Counts include machines that are available and machines already installed.
+- Players can roll a Seller. It can occupy any valid route end instead of being fixed to the fifth area.
+- A temporary dropper assembly visibly releases cubes onto the conveyor.
+- The route still begins with one dropper and ends with one Seller. Empty physical areas are skipped by the simulation.
+
+## Route and capacity rules
+
+- Area 1 must contain exactly one producer/dropper.
+- Processor machines can be placed only in unlocked areas.
+- Exactly one Seller must be the last occupied area. The Seller is terminal, but its physical area can change.
+- A rolled Seller replaces the existing terminal Seller in one validated operation; it cannot create a second Seller.
+- The Seller does not consume a processor capacity slot.
+- Moves and placements are transactional. A failed request leaves both the route and inventory unchanged.
+- The machine order in physical areas is the processing order.
 
 ## Systems
-- Build mode
-- Slot/grid occupancy
-- Placement validation
-- Move/remove transaction
-- Client preview
-- Server factory layout state
 
-## Technical Work
-- Define slot IDs and allowed machine categories. Keep the first four positions editable and the fifth seller fixed; capacity still gates the middle positions.
-- Add authoritative placement requests.
-- Ensure move operations cannot duplicate machines.
-- Serialize layout into a compact structure suitable for later saving.
+- Five-area physical layout backed by a compact ordered logical route.
+- Shared, pure placement rules for previewing and server validation.
+- Server-authoritative placement, replacement, movement, return, and inventory updates.
+- Click-to-open placement UI and full inventory view.
+- Temporary machine visuals and a visible first dropper item.
+- Save-compatible layout state.
 
-## Gameplay Work
-- Machine order changes actual processing order.
-- Invalid placements are rejected clearly.
-- Removing a machine returns it to a temporary inventory stub.
+## UI and content modularity
 
-## UI/UX Work
-- Build-mode toggle
-- Machine selection strip
-- Valid/invalid placement highlight
-- Cancel/remove controls; conveyor orientation stays fixed left-to-right
-- Touch-friendly controls for mobile and click-to-place world slots.
+Machine names, categories, rarity colors, roll weights, and display descriptions come from shared definitions/configuration. The inventory list derives its rows from machine definitions and current owned counts, so adding a machine does not require a copied client-side list. Visual families use data-driven MachineVisualConfig profiles. New machine families can add a profile and select it from a machine definition.
 
-## Art / Audio / Asset Requirements
-- Placeholder placement ghost
-- Slot markers
-- Selection/highlight effect
-- Build confirmation/error audio
+## Validation
 
-## Dependencies
-Phase 1 simulation and machine contract.
+Automated tests cover all five clickable areas, producer and Seller constraints, Seller rollability and movement, processor capacity, invalid route ordering, removal, and invalid indices.
 
-## Analytics / Instrumentation
-- Placement success/failure reason
-- Move/remove count
-- Time spent in build mode
-- Layout change count
+Studio acceptance checks:
 
-## Security / Exploit Considerations
-- Validate ownership, slot availability, capacity, machine ID, and request rate.
-- Make move transactional: old state is not released until destination is valid.
+- Click empty and occupied areas, including the current Seller area.
+- Place, replace, move, and return a processor from the contextual inventory.
+- Move a rolled Seller to another route end and confirm the old Seller becomes available inventory.
+- Open the Inventory button and compare owned, placed, and available counts.
+- Confirm no unrelated player's plot responds to the click.
+- Verify a cube visibly falls from the placeholder Dropper and travels along the conveyor on desktop and touch devices.
 
-## Performance Considerations
-- Placement preview runs locally.
-- Server validates only committed actions.
-- Avoid scanning all workspace descendants for every request.
+## Scope boundary
 
-## Automated Validation
-- Placement validation tests
-- Occupancy conflict tests
-- Move/remove inventory conservation tests
-- Layout serialization tests
-
-## Manual Validation
-- Desktop placement feel
-- Mobile placement feel
-- Reordering clarity
-- Rapid move/remove attempts
-- Two-player isolation
-
-## Scope Classification
-### Required Now
-- place/move/remove
-- server validation
-- mobile controls
-- order affects production
-### Valuable Later
-- copy tool
-- drag multi-select
-- free conveyor placement
-### Scope Creep
-- full Factorio building
-- blueprints
-- terrain editor
-
-## Explicitly Out of Scope
-- Roll system
-- final inventory
-- modular conveyors
-- multiple lines
-- cosmetics
-
-## Completion Definition
-Phase is complete when a desktop and mobile player can repeatedly rebuild a single production line without duplication, invalid overlap, or confusing controls.
+This is a temporary single-route proof of concept. It does not add a modular belt graph, splitters, mergers, free-form machine placement, or production physics. The placeholder models and click panel can be replaced later without changing the shared machine definitions or server placement rules.
