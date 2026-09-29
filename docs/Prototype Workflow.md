@@ -11,7 +11,7 @@ This branch keeps the first playable factory loop on a temporary baseplate. A dr
 
 `tests/studio/PrototypeSmoke.luau` is a repeatable local Studio playtest for the built place. Run it with Studio's `RunScript` command-line task and `--localPlaceFile TinyFactory.rbxlx`. It checks the roll dock label, per-machine odds in inventory and reveal, chance-derived machine rarities, free roll and cooldown, placement, production and sale, recycling, capacity, loot claim, and duplicate-claim protection. The regular GitHub runner cannot execute this Studio-only test.
 
-The event presentation registry is in `src/client/Controllers/EffectsController.luau`. Server systems announce moments through `EffectService.fire(player, eventName, payload)`. Add a new visual or short cutscene by registering an event handler in the client controller. These effects are cosmetic; the server owns inventory, RNG, loot rewards, production, and Coins.
+The event presentation registry is in `src/client/Controllers/EffectsController.luau`. Server systems announce moments through `EffectService.fire(player, eventName, payload)`. Add a new visual or short cutscene by registering an event handler in the client controller. These effects are cosmetic; the server owns inventory, RNG, loot rewards, production, and Coins. The ultra-rare roll presentation is configured in `EconomyConfig`; its odds threshold and duration can be changed without modifying the roll algorithm. Studio smoke tests exercise the cutscene event with synthetic 1/10,001 odds so no extremely rare live machine is required.
 
 ## Workspace and 3D assets
 
