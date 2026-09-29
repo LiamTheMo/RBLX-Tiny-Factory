@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local EconomyConfig = require(Shared:WaitForChild("EconomyConfig"))
+local BoosterConfig = require(Shared:WaitForChild("BoosterConfig"))
 local EconomyRules = require(Shared:WaitForChild("EconomyRules"))
 local FactoryConfig = require(Shared:WaitForChild("FactoryConfig"))
 local MachineDefinitions = require(Shared:WaitForChild("MachineDefinitions"))
@@ -34,15 +35,33 @@ local function dataIsReady(player: Player): boolean
 	return player:GetAttribute("FactoryDataReady") == true
 end
 
+local function refreshLuck(player: Player, profile: any, notifyExpired: boolean): number
+	local now = workspace:GetServerTimeNow()
+	local wasActive = profile.LuckMultiplier > 1 and profile.LuckExpiresAt > 0
+	if wasActive and profile.LuckExpiresAt <= now then
+		profile.LuckMultiplier = 1
+		profile.LuckExpiresAt = 0
+		if notifyExpired then EffectService.fire(player, "InventoryChanged") end
+	end
+	if player:GetAttribute("FactoryLuckMultiplier") ~= profile.LuckMultiplier then
+		player:SetAttribute("FactoryLuckMultiplier", profile.LuckMultiplier)
+	end
+	if player:GetAttribute("FactoryLuckExpiresAt") ~= profile.LuckExpiresAt then
+		player:SetAttribute("FactoryLuckExpiresAt", profile.LuckExpiresAt)
+	end
+	return profile.LuckMultiplier
+end
+
 local function getProfile(player: Player): any
 	local profile = profiles[player]
 	if not profile then
-		profile = { RollCount = 0, NextRollAt = 0 }
+		profile = { RollCount = 0, NextRollAt = 0, LuckMultiplier = 1, LuckExpiresAt = 0 }
 		profiles[player] = profile
+		player:SetAttribute("FactoryLuckMultiplier", 1)
+		player:SetAttribute("FactoryLuckExpiresAt", 0)
 	end
 	return profile
 end
-
 local function isRateLimited(player: Player): boolean
 	local now = os.clock()
 	local previous = lastRequestAt[player] or 0
@@ -71,6 +90,7 @@ local function getClientState(player: Player): { [string]: any }
 		return { Success = false, Reason = "Factory is not ready" }
 	end
 	local profile = getProfile(player)
+	local luckMultiplier = refreshLuck(player, profile, false)
 	local rollCost = EconomyRules.getRollCost(profile.RollCount)
 	local capacityCost = EconomyRules.getCapacityCost(state.capacity)
 	return {
@@ -90,15 +110,20 @@ local function getClientState(player: Player): { [string]: any }
 		CapacityCost = capacityCost,
 		LastRoll = player:GetAttribute("FactoryLastRoll"),
 		LastRarity = player:GetAttribute("FactoryLastRarity"),
+		LastRollLuckMultiplier = player:GetAttribute("FactoryLastRollLuckMultiplier") or 1,
+		LuckMultiplier = luckMultiplier,
+		LuckExpiresAt = profile.LuckExpiresAt,
 	}
 end
 
-local function chooseMachine(): any?
-	local rollPool = MachineDefinitions.getRollPool()
-	local machineId = EconomyRules.pickMachineId(rollPool, random:NextNumber(0, EconomyConfig.MachineRollChanceTotal))
-	return machineId and MachineDefinitions.get(machineId) or nil
+local function chooseMachine(luckMultiplier: number): (any?, { any })
+	local baseRollPool = MachineDefinitions.getRollPool()
+	local rollPool = EconomyRules.getLuckAdjustedRollPool(baseRollPool, luckMultiplier)
+	local totalChance = EconomyRules.getRollPoolTotalChance(rollPool)
+	if totalChance <= 0 then return nil, rollPool end
+	local machineId = EconomyRules.pickMachineId(rollPool, random:NextNumber() * totalChance)
+	return machineId and MachineDefinitions.get(machineId) or nil, rollPool
 end
-
 local function response(player: Player, success: boolean, reason: string?): { [string]: any }
 	local state = getState(player)
 	local result = getClientState(player)
@@ -113,36 +138,27 @@ end
 
 local function rollMachine(player: Player)
 	local state = getState(player)
-	if not state then
-		return { Success = false, Reason = "Factory is not ready" }
-	end
-	if not dataIsReady(player) then
-		return response(player, false, "Factory data is loading")
-	end
-	if isRateLimited(player) then
-		return response(player, false, "Too many requests")
-	end
+	if not state then return { Success = false, Reason = "Factory is not ready" } end
+	if not dataIsReady(player) then return response(player, false, "Factory data is loading") end
+	if isRateLimited(player) then return response(player, false, "Too many requests") end
 	local profile = getProfile(player)
 	local now = os.clock()
 	local canRoll, reason = EconomyRules.canRoll(profile.NextRollAt, now, inventoryCount(state.inventory))
-	if not canRoll then
-		return response(player, false, reason)
-	end
-
-	local definition = chooseMachine()
-	if not definition then
-		return response(player, false, "No rollable machines are configured")
-	end
+	if not canRoll then return response(player, false, reason) end
+	local luckMultiplier = refreshLuck(player, profile, false)
+	local definition, rollPool = chooseMachine(luckMultiplier)
+	if not definition then return response(player, false, "No rollable machines are configured") end
+	local rarity = EconomyRules.getMachineRarity(definition.Id, rollPool) or definition.Rarity
 	state.inventory[definition.Id] = (state.inventory[definition.Id] or 0) + 1
 	profile.RollCount += 1
 	profile.NextRollAt = now + EconomyConfig.RollCooldownSeconds
 	player:SetAttribute("FactoryLastRoll", definition.Id)
-	player:SetAttribute("FactoryLastRarity", definition.Rarity)
+	player:SetAttribute("FactoryLastRarity", rarity)
+	player:SetAttribute("FactoryLastRollLuckMultiplier", luckMultiplier)
 	AnalyticsService.record(player, "MachineRolled")
 	EffectService.fire(player, "InventoryChanged")
 	return response(player, true)
 end
-
 local function sellMachine(player: Player, machineId: any, quantity: any)
 	local state = getState(player)
 	if not state then
@@ -203,6 +219,22 @@ local function buyCapacity(player: Player)
 	return response(player, true)
 end
 
+function EconomyService.grantLuckBoost(player: Player, multiplier: number, durationSeconds: number): boolean
+	if not dataIsReady(player) or type(multiplier) ~= "number" or multiplier ~= multiplier
+		or type(durationSeconds) ~= "number" or durationSeconds ~= durationSeconds
+		or multiplier < 1 or multiplier > EconomyConfig.MaxLuckMultiplier
+		or durationSeconds < 1 or durationSeconds > BoosterConfig.MaxLuckDurationSeconds then
+		return false
+	end
+	local profile = getProfile(player)
+	local currentMultiplier = refreshLuck(player, profile, false)
+	local now = workspace:GetServerTimeNow()
+	profile.LuckMultiplier = math.max(currentMultiplier, multiplier)
+	profile.LuckExpiresAt = math.min(math.max(profile.LuckExpiresAt, now + durationSeconds), now + BoosterConfig.MaxLuckDurationSeconds)
+	refreshLuck(player, profile, false)
+	return true
+end
+
 function EconomyService.getPersistentState(player: Player): { [string]: any }?
 	local profile = profiles[player]
 	if not profile then
@@ -251,6 +283,12 @@ function EconomyService.start()
 	for _, player in Players:GetPlayers() do
 		getProfile(player)
 	end
+	task.spawn(function()
+		while true do
+			for player, profile in pairs(profiles) do refreshLuck(player, profile, true) end
+			task.wait(1)
+		end
+	end)
 end
 
 return EconomyService

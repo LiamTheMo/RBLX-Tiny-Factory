@@ -11,6 +11,12 @@ resultEvent.Parent = ReplicatedStorage
 local grantFunction = Instance.new("RemoteFunction")
 grantFunction.Name = "PrototypeTestGrant"
 grantFunction.Parent = ReplicatedStorage
+local findDropFunction = Instance.new("RemoteFunction")
+findDropFunction.Name = "PrototypeTestFindDrop"
+findDropFunction.Parent = ReplicatedStorage
+local armDropFunction = Instance.new("RemoteFunction")
+armDropFunction.Name = "PrototypeTestArmDrop"
+armDropFunction.Parent = ReplicatedStorage
 
 local serverTest = Instance.new("Script")
 serverTest.Name = "PrototypeServerTest"
@@ -19,13 +25,43 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StudioTestService = game:GetService("StudioTestService")
 local FactoryService = require(game.ServerScriptService.Server.Services.FactoryService)
 local LootService = require(game.ServerScriptService.Server.Services.LootService)
+local EconomyService = require(game.ServerScriptService.Server.Services.EconomyService)
 local resultEvent = ReplicatedStorage.PrototypeTestResult
 local grantFunction = ReplicatedStorage.PrototypeTestGrant
+local findDropFunction = ReplicatedStorage.PrototypeTestFindDrop
+local armDropFunction = ReplicatedStorage.PrototypeTestArmDrop
+local testDrops = {}
+local lootCountBefore = {}
 
-grantFunction.OnServerInvoke = function(player)
+grantFunction.OnServerInvoke = function(player, grantKind)
+	if grantKind == "Luck" then return EconomyService.grantLuckBoost(player, 2, 30) end
 	local factory = FactoryService.getState(player)
 	assert(factory, "factory missing during test grant")
 	return factory.simulation:grantCoins(30)
+end
+
+findDropFunction.OnServerInvoke = function(player)
+	local folder = workspace:WaitForChild("TinyFactoryBoosters", 15)
+	if not folder then return nil end
+	local deadline = os.clock() + 15
+	repeat
+		for _, candidate in ipairs(folder:GetChildren()) do
+			if candidate:IsA("BasePart") and candidate:GetAttribute("SourcePlotUserId") == player.UserId then
+				candidate.CanTouch = false
+				testDrops[player] = candidate
+				lootCountBefore[player] = player:GetAttribute("Analytics_LootCollected") or 0
+				return candidate
+			end
+		end
+		task.wait(0.1)
+	until os.clock() >= deadline
+	return nil
+end
+
+armDropFunction.OnServerInvoke = function(player, candidate)
+	if candidate ~= testDrops[player] or not candidate or candidate.Parent ~= workspace:FindFirstChild("TinyFactoryBoosters") then return false end
+	candidate.CanTouch = true
+	return true
 end
 
 resultEvent.OnServerEvent:Connect(function(player, success, message)
@@ -37,17 +73,21 @@ resultEvent.OnServerEvent:Connect(function(player, success, message)
 	local factory = FactoryService.getState(player)
 	local snapshot = factory.simulation:getSnapshot()
 	assert(snapshot.ProducedItems > 0 and snapshot.SoldItems > 0 and snapshot.Coins > 0, "factory did not produce and sell")
-	local loot = factory.plot:FindFirstChild("CoinDrop")
-	assert(loot and loot:GetAttribute("OwnerUserId") == player.UserId, "world Coin drop missing")
-	assert(loot:FindFirstChildOfClass("ProximityPrompt"), "Coin drop pickup missing")
-	assert(LootService.claim(player, loot), "owner could not claim world drop")
-	assert(not LootService.claim(player, loot), "world drop claimed twice")
-	assert(player:GetAttribute("Analytics_LootCollected") == 1, "loot analytics missing")
+	local factoryLayout = require(game.ReplicatedStorage.Shared.FactoryLayout)
+	for slotIndex = 1, factoryLayout.EditableSlotCount do
+		local belt = factory.plot:FindFirstChild("Conveyor_" .. slotIndex)
+		assert(belt and belt:FindFirstChild("FactorySlotClick"), "editable conveyor slot is not clickable")
+	end
+	assert(not factory.plot:FindFirstChild("Conveyor_" .. factoryLayout.SellerSlotIndex):FindFirstChild("FactorySlotClick"), "fixed seller slot must not be editable")
+	local loot = testDrops[player]
+	assert(loot and loot:GetAttribute("Claimed") == true and loot.Parent == nil, "running over the world booster did not claim it")
+	assert(not LootService.claim(player, loot), "world booster claimed twice")
+	assert((player:GetAttribute("Analytics_LootCollected") or 0) == lootCountBefore[player] + 1, "booster pickup analytics missing")
 	print("Prototype gameplay smoke test passed")
 	StudioTestService:EndTest("Prototype gameplay smoke test passed")
 end)
 
-task.delay(25, function()
+task.delay(45, function()
 	StudioTestService:EndTest("FAIL: client test timed out")
 end)
 ]==]
@@ -61,6 +101,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local player = Players.LocalPlayer
 local resultEvent = ReplicatedStorage:WaitForChild("PrototypeTestResult")
 local grantFunction = ReplicatedStorage:WaitForChild("PrototypeTestGrant")
+local findDropFunction = ReplicatedStorage:WaitForChild("PrototypeTestFindDrop")
+local armDropFunction = ReplicatedStorage:WaitForChild("PrototypeTestArmDrop")
 
 local success, message = pcall(function()
 	local factory = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Factory")
@@ -89,6 +131,9 @@ local success, message = pcall(function()
 	assert(machine, "rolled machine definition missing")
 	assert(machine.Rarity == economyRules.getRarityFromOdds(100 / machine.RollChance), "machine rarity did not follow its chance")
 	local firstOdds = economyRules.getMachineOddsLabel(machine.Id, definition.getRollPool())
+	assert(grantFunction:InvokeServer("Luck"), "timed Luck booster grant failed")
+	local luckyState = state:InvokeServer()
+	assert(luckyState.LuckMultiplier == 2 and luckyState.LuckExpiresAt > workspace:GetServerTimeNow(), "Luck state was not synchronized")
 	local buildInventory = player.PlayerGui:WaitForChild("BuildHud"):WaitForChild("BuildPanel"):WaitForChild("InventoryList")
 	local inventoryRow = buildInventory:WaitForChild("Machine_" .. first.LastRoll, 2) :: TextButton?
 	assert(inventoryRow and inventoryRow:IsA("TextButton"), "rolled machine missing from build inventory")
@@ -102,31 +147,27 @@ local success, message = pcall(function()
 	local second = roll:InvokeServer()
 	assert(second.Success and second.RollCount == first.RollCount + 1, "cooldown did not expire")
 	local effects = require(player.PlayerScripts.Client.Controllers.EffectsController)
-	effects.play("MachineRolled", { MachineId = second.LastRoll, Rarity = second.LastRarity })
+	effects.play("MachineRolled", { MachineId = second.LastRoll, Rarity = second.LastRarity, LuckMultiplier = second.LastRollLuckMultiplier })
 	local overlay = player.PlayerGui.FactoryEffects.CutsceneOverlay
 	assert(overlay.Visible, "roll cutscene did not open")
 	task.wait(0.12)
 	local rollingText = overlay.RevealCard.Text
-	assert(rollingText:find("1/", 1, true) and rollingText:find("·", 1, true), "rolling animation should show odds and rarity in one line")
-	local showsRollingRarity = false
+	assert(rollingText:find("1/", 1, true) and rollingText:find("·", 1, true), "roll animation should show odds on one line")
 	for _, band in ipairs(require(ReplicatedStorage.Shared.EconomyConfig).RarityOddsBands) do
-		if rollingText:find(band.Name, 1, true) then
-			showsRollingRarity = true
-			break
-		end
+		assert(not rollingText:find(band.Name, 1, true), "rarity should stay in the heading, not the result line")
 	end
-	assert(showsRollingRarity, "rolling animation should show the sampled machine rarity")
 	local secondMachine = definition.get(second.LastRoll)
-	assert(secondMachine, "second rolled machine definition missing")
-	assert(secondMachine.Rarity == economyRules.getRarityFromOdds(100 / secondMachine.RollChance), "second machine rarity did not follow its chance")
-	local secondOdds = economyRules.getMachineOddsLabel(secondMachine.Id, definition.getRollPool())
+	assert(secondMachine and second.LastRollLuckMultiplier == 2, "second roll did not use active Luck")
+	local activeRollPool = economyRules.getLuckAdjustedRollPool(definition.getRollPool(), second.LastRollLuckMultiplier)
+	local secondRarity = economyRules.getMachineRarity(secondMachine.Id, activeRollPool)
+	local secondOdds = economyRules.getMachineOddsLabel(secondMachine.Id, activeRollPool)
 	task.wait(1.7)
-	assert(overlay.Heading.Text == string.upper(secondMachine.Rarity) .. " MACHINE!", "roll reveal rarity did not match the chance-derived tier")
+	assert(overlay.Heading.Text == string.upper(secondRarity) .. " MACHINE!", "roll reveal rarity did not match active chance-derived tier")
 	assert(secondOdds and overlay.RevealCard.Text:find(secondOdds, 1, true), "roll reveal omitted machine odds")
-	assert(overlay.RevealCard.Text:find(secondMachine.Rarity, 1, true), "roll reveal omitted rarity from its one-line result")
+	assert(not overlay.RevealCard.Text:find(secondRarity, 1, true), "roll result should not repeat rarity by the heading")
 	assert(overlay.RevealCard.TextWrapped == false, "roll reveal text should stay on one line")
 	local textLimit = overlay.RevealCard:FindFirstChildOfClass("UITextSizeConstraint")
-	assert(textLimit and textLimit.MaxTextSize <= 13, "roll reveal text should use a compact font")
+	assert(textLimit and textLimit.MinTextSize >= 12 and textLimit.MaxTextSize >= 16, "roll reveal text should stay readable on one line")
 	effects.play("UltraRareRollCutscene", { MachineName = "Test Machine", Rarity = "Legendary", Odds = "1/10001" })
 	task.wait(0.1)
 	assert(overlay.Visible and overlay.Heading.Text == "ULTRA RARE MACHINE!", "ultra-rare cutscene test event did not open")
@@ -138,7 +179,15 @@ local success, message = pcall(function()
 	task.wait(0.15)
 	local upgraded = buyCapacity:InvokeServer()
 	assert(upgraded.Success and upgraded.Capacity == 2, "capacity purchase failed")
-	task.wait(2)
+	local targetDrop = findDropFunction:InvokeServer()
+	assert(targetDrop and targetDrop:IsA("BasePart") and not targetDrop.CanTouch, "test booster was not held for touch pickup")
+	assert(not targetDrop:FindFirstChildOfClass("ProximityPrompt"), "world booster should not need an interaction prompt")
+	local character = player.Character or player.CharacterAdded:Wait()
+	local root = character:WaitForChild("HumanoidRootPart") :: BasePart
+	root.CFrame = CFrame.new(targetDrop.Position + Vector3.new(0, 8, 0))
+	assert(armDropFunction:InvokeServer(targetDrop), "test booster touch could not be armed")
+	root.CFrame = CFrame.new(targetDrop.Position + Vector3.new(0, 1.5, 0))
+	task.wait(1)
 end)
 
 resultEvent:FireServer(success, tostring(message))

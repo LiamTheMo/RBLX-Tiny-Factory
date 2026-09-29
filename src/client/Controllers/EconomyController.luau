@@ -88,6 +88,15 @@ function EconomyController.start()
 	status.TextSize = 12
 	status.Parent = panel
 
+	local luckStatus = Instance.new("TextLabel")
+	luckStatus.Name = "LuckStatus"
+	luckStatus.BackgroundTransparency = 1
+	luckStatus.TextColor3 = Color3.fromRGB(207, 176, 240)
+	luckStatus.Font = Enum.Font.GothamBold
+	luckStatus.TextSize = 11
+	luckStatus.TextXAlignment = Enum.TextXAlignment.Left
+	luckStatus.Parent = panel
+
 	local result = Instance.new("TextLabel")
 	result.BackgroundTransparency = 1
 	result.TextColor3 = COLORS.Accent
@@ -95,8 +104,8 @@ function EconomyController.start()
 	result.Font = Enum.Font.GothamBold
 	result.TextScaled = true
 	local resultTextLimit = Instance.new("UITextSizeConstraint")
-	resultTextLimit.MinTextSize = 8
-	resultTextLimit.MaxTextSize = 11
+	resultTextLimit.MinTextSize = 12
+	resultTextLimit.MaxTextSize = 16
 	resultTextLimit.Parent = result
 	result.Parent = panel
 
@@ -145,11 +154,19 @@ function EconomyController.start()
 	local cooldownEndAt = 0
 	local rolling = false
 
+	local function updateLuckStatus()
+		local multiplier = if state then state.LuckMultiplier or 1 else 1
+		local expiresAt = if state then state.LuckExpiresAt or 0 else 0
+		local remaining = math.max(0, expiresAt - workspace:GetServerTimeNow())
+		luckStatus.Visible = multiplier > 1 and remaining > 0
+		luckStatus.Text = if luckStatus.Visible then string.format("Luck x%.1f · %ds", multiplier, math.ceil(remaining)) else ""
+	end
+
 	local function updateRollButton()
 		local remaining = math.max(0, cooldownEndAt - os.clock())
 		local ready = state ~= nil and state.DataReady == true
 		roll.Text = if rolling then "ROLLING..." elseif not ready then "FACTORY LOADING" elseif remaining > 0 then string.format("READY IN %.1fs", remaining) else "Roll"
-		roll.TextSize = if rolling then 12 else 20
+		roll.TextSize = if rolling then 16 else 20
 		roll.TextWrapped = false
 		roll.Active = ready and not rolling and remaining <= 0
 		roll.AutoButtonColor = roll.Active
@@ -199,6 +216,7 @@ function EconomyController.start()
 			return
 		end
 		status.Text = if state.DataReady then `Coins {state.Coins}  |  Slots {state.Capacity}/{state.MaxCapacity}  |  Machines {state.InventoryCount or 0}/{state.MaxInventoryMachines or 200}` else (state.DataError or "Factory data is loading")
+		updateLuckStatus()
 		capacity.Text = if state.CapacityCost then `Buy capacity · {state.CapacityCost} Coins` else "Capacity MAX"
 		clearDynamicChildren(inventoryList)
 		local count = 0
@@ -246,10 +264,14 @@ function EconomyController.start()
 		local response = invoke(rollMachine)
 		if response and response.Success then
 			local definition = response.LastRoll and MachineDefinitions.get(response.LastRoll)
-			local rarity = definition and definition.Rarity or response.LastRarity or "Unknown"
-			local odds = if definition and definition.Rollable then EconomyRules.getMachineOddsLabel(definition.Id, MachineDefinitions.getRollPool()) else nil
+			local luckMultiplier = response.LastRollLuckMultiplier or 1
+			local rollPool = EconomyRules.getLuckAdjustedRollPool(MachineDefinitions.getRollPool(), luckMultiplier)
+			local odds = if definition and definition.Rollable then EconomyRules.getMachineOddsLabel(definition.Id, rollPool) else nil
 			local machineName = definition and definition.DisplayName or response.LastRoll or "Machine"
-			result.Text = if odds then `Rolled: {machineName} · {rarity} · {odds}` else `Rolled: {machineName} · {rarity}`
+			result.Text = if odds then string.format("Rolled: %s · %s", machineName, odds) else string.format("Rolled: %s", machineName)
+			setStatus("Machine added to inventory.", true)
+			refresh(response)
+			EffectsController.play("MachineRolled", { MachineId = response.LastRoll, Rarity = response.LastRarity, LuckMultiplier = luckMultiplier })
 			setStatus("Machine added to inventory.", true)
 			refresh(response)
 			EffectsController.play("MachineRolled", { MachineId = response.LastRoll, Rarity = response.LastRarity })
@@ -281,23 +303,25 @@ function EconomyController.start()
 			panelWidth = math.floor(math.clamp(viewportWidth * widthRatio, 232, 272))
 			panelWidth = math.min(panelWidth, math.max(184, viewportWidth - 16))
 		end
-		panel.Size = if compact then UDim2.fromOffset(panelWidth, 204) else UDim2.fromOffset(panelWidth, 350)
+		panel.Size = if compact then UDim2.fromOffset(panelWidth, 220) else UDim2.fromOffset(panelWidth, 360)
 		panel.Position = if compactLandscape then UDim2.fromOffset(8, 8) elseif compact then UDim2.fromOffset(8, 8) else UDim2.new(1, -316, 0, 16)
 		title.Position = UDim2.fromOffset(8, 8)
 		title.Size = UDim2.new(1, -16, 0, if compact then 24 else 26)
 		status.Position = UDim2.fromOffset(8, if compact then 34 else 36)
-		status.Size = UDim2.new(1, -16, 0, if compact then 34 else 24)
-		result.Position = UDim2.fromOffset(8, if compact then 70 else 62)
+		status.Size = UDim2.new(1, -16, 0, if compact then 30 else 24)
+		luckStatus.Position = UDim2.fromOffset(8, if compact then 64 else 62)
+		luckStatus.Size = UDim2.new(1, -16, 0, 16)
+		result.Position = UDim2.fromOffset(8, if compact then 82 else 84)
 		result.Size = UDim2.new(1, -16, 0, if compact then 20 else 24)
-		capacity.Position = UDim2.fromOffset(8, if compact then 94 else 130)
-		capacity.Size = UDim2.fromOffset(panelWidth - 16, if compact then 38 else 34)
+		capacity.Position = UDim2.fromOffset(8, if compact then 106 else 130)
+		capacity.Size = UDim2.fromOffset(panelWidth - 16, if compact then 36 else 34)
 		rollDock.Size = UDim2.fromOffset(if compact then math.min(268, viewportWidth - 24) else 320, 72)
 		roll.Position = UDim2.fromOffset(8, 8)
 		roll.Size = UDim2.new(1, -16, 1, -16)
-		inventoryTitle.Position = UDim2.fromOffset(8, if compact then 138 else 174)
+		inventoryTitle.Position = UDim2.fromOffset(8, if compact then 146 else 174)
 		inventoryTitle.Size = UDim2.new(1, -16, 0, 18)
-		inventoryList.Position = UDim2.fromOffset(8, if compact then 158 else 196)
-		inventoryList.Size = UDim2.new(1, -16, 0, if compact then 38 else 142)
+		inventoryList.Position = UDim2.fromOffset(8, if compact then 166 else 196)
+		inventoryList.Size = UDim2.new(1, -16, 0, if compact then 48 else 152)
 		render()
 	end
 
@@ -320,7 +344,8 @@ function EconomyController.start()
 	task.spawn(function()
 		while screenGui.Parent do
 			updateRollButton()
-			task.wait(0.1)
+			updateLuckStatus()
+			task.wait(0.25)
 		end
 	end)
 end

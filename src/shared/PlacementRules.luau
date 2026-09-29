@@ -15,7 +15,7 @@ local PlacementRules = {}
 local function slotCategory(slotIndex: number): string
 	if slotIndex == 1 then
 		return "Producer"
-	elseif slotIndex == FactoryLayout.SlotCount then
+	elseif slotIndex == FactoryLayout.SellerSlotIndex then
 		return "Seller"
 	end
 	return "Processor"
@@ -58,7 +58,7 @@ function PlacementRules.isSlotUnlocked(slotIndex: any, capacity: any): (boolean,
 	if type(capacity) ~= "number" or capacity < 1 or capacity % 1 ~= 0 then
 		return false, "Capacity is invalid"
 	end
-	if slotIndex > 1 and slotIndex < FactoryLayout.SlotCount and slotIndex > capacity + 1 then
+	if slotIndex > 1 and slotIndex < FactoryLayout.SellerSlotIndex and slotIndex > capacity + 1 then
 		return false, "Slot is locked by factory capacity"
 	end
 	return true
