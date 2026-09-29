@@ -201,6 +201,15 @@ Use reusable behaviors for common numeric/value/visual/throughput mechanics.
 Keep bespoke logic isolated. Rarity is not a universal power ladder; Common
 machines must remain strategically useful.
 
+## Modular content rule
+
+Keep machine definitions, their individual roll weights, rarity bands, and rarity
+presentation colors in shared data modules. Services, controllers, and tests
+should derive behavior from those definitions instead of keeping copied machine
+lists, threshold chains, or color maps. Adding a machine or rarity should
+normally require a new definition/config entry plus focused validation, not a
+rewrite of the roll algorithm or reveal UI.
+
 ## Economy and security rules
 
 Rolls are free with a server-owned cooldown; Coins fund limited capacity upgrades.
