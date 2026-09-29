@@ -4,7 +4,8 @@ local FactoryService = require(script.Parent.FactoryService)
 local EconomyService = require(script.Parent.EconomyService)
 local AnalyticsService = require(script.Parent.AnalyticsService)
 local DataService = require(script.Parent.DataService)
-local AssetShowcaseService = require(script.Parent.AssetShowcaseService)
+local EffectService = require(script.Parent.EffectService)
+local LootService = require(script.Parent.LootService)
 
 local GameService = {}
 local started = false
@@ -14,11 +15,12 @@ function GameService.start()
 		return
 	end
 	started = true
-	task.spawn(AssetShowcaseService.start)
+	EffectService.start()
 	FactoryService.start()
 	EconomyService.start()
 	DataService.start()
 	AnalyticsService.start()
+	LootService.start()
 end
 
 return GameService

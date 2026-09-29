@@ -4,7 +4,7 @@
 
 The economy exists to generate **factory decisions**.
 
-Money should unlock new rolls and modest capacity, but the player's strongest progress should come from better machine combinations.
+Free rolls should create new machine choices; Coins earned from production and pickups unlock modest capacity.
 
 ## 2. v1.00 Currency
 
@@ -16,43 +16,40 @@ Coins are earned by selling factory items.
 
 Coins are spent on:
 
-- machine rolls
 - limited factory capacity upgrades
 
 Do not add a second currency unless a validated problem cannot be solved cleanly with Coins.
 
-## 3. Roll Cost Philosophy
+## 3. Roll Pacing
 
-Rolls should be frequent enough to create experimentation but expensive enough that the player cares about each result.
+Rolls are free. The server enforces a short cooldown between successful rolls so clients cannot spam inventory grants.
 
 Recommended model:
 
-- rising roll costs within broad progression bands
-- cost growth slower than idealized production growth
-- partial protection against long unlucky streaks
-- unwanted machine resale prevents total dead rolls
+- a configurable three-second cooldown for the prototype
+- a bounded inventory with recycling for unwanted machines
+- rarity weights that keep common machines strategically useful
 
 Exact numbers must come from playtests.
 
-## 4. Machine Resale
+## 4. Machine Recycling
 
-Selling an unwanted machine should return a **partial** amount, not full roll cost.
+Recycling an unwanted machine frees one inventory slot and returns no Coins.
 
 Purpose:
 
-- reduce frustration
-- keep bad rolls meaningful
-- prevent free infinite reroll loops
+- keep inventory usable
+- avoid converting free rolls into unlimited Coins
 
-The refund rate should be configured, not hard-coded.
+The conveyor seller and world Coin drops are the ways this prototype earns Coins.
 
 ## 5. Factory Expansion
 
-Capacity upgrades compete with rolls for the same Coins.
+Capacity upgrades are the only Coin purchase in this prototype.
 
 This creates a useful choice:
 
-> Roll for a better machine now, or buy more space for stronger combinations?
+> Which machines should I keep, and when should I buy room for stronger combinations?
 
 Keep expansion steps few and legible in v1.00.
 
@@ -102,8 +99,7 @@ Watch for:
 - duplication before every multiplier
 - speed increases creating runaway spawn counts
 - exponential capacity expansion
-- machine resale arbitrage
-- roll cost lagging far behind production
+- free-roll recycling accidentally awarding Coins
 - offline income trivializing active factory decisions
 
 ## 10. Balance Controls
@@ -114,9 +110,8 @@ Keep critical values in configuration:
 - drop intervals
 - processing delays
 - multipliers
-- roll costs
+- roll cooldown and inventory cap
 - rarity weights
-- refund fraction
 - expansion prices
 - active item caps
 

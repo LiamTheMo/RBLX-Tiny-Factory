@@ -212,8 +212,8 @@ Rolls run on the server.
 
 Pipeline:
 
-1. validate request and cost
-2. debit Coins transactionally
+1. validate request, server cooldown, and inventory space
+2. reserve the next server cooldown
 3. select rarity using server config
 4. select eligible machine from pool
 5. grant inventory item
@@ -272,7 +272,7 @@ Analytics events should be emitted from authoritative systems when possible.
 
 Examples:
 
-- roll purchased
+- free roll granted
 - machine granted
 - machine placed
 - machine removed

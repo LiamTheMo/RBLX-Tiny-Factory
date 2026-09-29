@@ -18,7 +18,7 @@ The game should reward experimentation more than passive waiting.
 
 ## 3. Core Loop — Current Design
 
-Produce → transform → sell → earn → roll → decide → rebuild → expand → repeat.
+Produce → transform → sell → earn → roll → decide → rebuild → expand → repeat. Rolls are free on a server cooldown; Coins pay for capacity.
 
 The loop succeeds when players repeatedly make **layout decisions**, not merely wait for an upgrade button.
 
@@ -110,10 +110,10 @@ RNG determines which machine option appears, but the player should keep agency.
 
 v1.00 recommended model:
 
-- Coins buy a roll.
+- Rolls are free with a server-authoritative cooldown.
 - A roll returns one machine or, if implementation cost remains low, a **choice of three**.
 - Duplicate machines are allowed.
-- Unwanted machines can be sold for a partial Coin refund.
+- Unwanted machines can be recycled without a Coin payout.
 - A lightweight pity or bad-luck protection system may exist if test data shows streak frustration.
 
 Do not sell real-money luck or rare rolls in v1.00.
@@ -175,7 +175,7 @@ This list is a design starting point, not a promise. Remove any machine that doe
 v1.00 progression consists of:
 
 - Coins
-- machine inventory growth
+- bounded machine inventory growth
 - a small number of factory capacity upgrades
 - production milestones
 - discovery of machine types
@@ -199,10 +199,9 @@ Use **Coins only** in v1.00.
 
 Coins pay for:
 
-- machine rolls
 - limited factory capacity upgrades
 
-Unwanted machines return a fraction of their effective roll value.
+Unwanted machines can be recycled to free inventory space. Free rolls cannot generate Coins through recycling.
 
 The economy must keep players rebuilding rather than waiting for exponential passive accumulation.
 

@@ -10,6 +10,7 @@ local FactoryConfig = require(Shared:WaitForChild("FactoryConfig"))
 local MachineDefinitions = require(Shared:WaitForChild("MachineDefinitions"))
 local FactoryService = require(script.Parent.FactoryService)
 local AnalyticsService = require(script.Parent.AnalyticsService)
+local EffectService = require(script.Parent.EffectService)
 
 local EconomyService = {}
 local profiles = {}
@@ -29,10 +30,14 @@ local function getState(player: Player): any?
 	return FactoryService.getState(player)
 end
 
+local function dataIsReady(player: Player): boolean
+	return player:GetAttribute("FactoryDataReady") == true
+end
+
 local function getProfile(player: Player): any
 	local profile = profiles[player]
 	if not profile then
-		profile = { RollCount = 0 }
+		profile = { RollCount = 0, NextRollAt = 0 }
 		profiles[player] = profile
 	end
 	return profile
@@ -52,6 +57,14 @@ local function getWallet(state: any): number
 	return state.simulation:getSnapshot().Coins
 end
 
+local function inventoryCount(inventory: { [string]: number }): number
+	local count = 0
+	for _, quantity in pairs(inventory) do
+		count += quantity
+	end
+	return count
+end
+
 local function getClientState(player: Player): { [string]: any }
 	local state = getState(player)
 	if not state then
@@ -64,10 +77,16 @@ local function getClientState(player: Player): { [string]: any }
 		Success = true,
 		Coins = getWallet(state),
 		Inventory = copyInventory(state.inventory),
+		InventoryCount = inventoryCount(state.inventory),
+		MaxInventoryMachines = EconomyConfig.MaxInventoryMachines,
 		Capacity = state.capacity,
 		MaxCapacity = FactoryConfig.MaxFactoryCapacity,
 		RollCount = profile.RollCount,
 		RollCost = rollCost,
+		RollCooldownSeconds = EconomyConfig.RollCooldownSeconds,
+		RollCooldownRemaining = EconomyRules.getRollCooldownRemaining(profile.NextRollAt, os.clock()),
+		DataReady = dataIsReady(player),
+		DataError = player:GetAttribute("FactoryDataError"),
 		CapacityCost = capacityCost,
 		LastRoll = player:GetAttribute("FactoryLastRoll"),
 		LastRarity = player:GetAttribute("FactoryLastRarity"),
@@ -115,29 +134,31 @@ local function rollMachine(player: Player)
 	if not state then
 		return { Success = false, Reason = "Factory is not ready" }
 	end
+	if not dataIsReady(player) then
+		return response(player, false, "Factory data is loading")
+	end
 	if isRateLimited(player) then
 		return response(player, false, "Too many requests")
 	end
 	local profile = getProfile(player)
-	local rollCost, costError = EconomyRules.getRollCost(profile.RollCount)
-	if not rollCost then
-		return response(player, false, costError)
-	end
-	if not state.simulation:tryDebitCoins(rollCost) then
-		return response(player, false, "Not enough Coins")
+	local now = os.clock()
+	local canRoll, reason = EconomyRules.canRoll(profile.NextRollAt, now, inventoryCount(state.inventory))
+	if not canRoll then
+		return response(player, false, reason)
 	end
 
 	local rarity = chooseRarity()
 	local definition = chooseMachine(rarity)
 	if not definition then
-		state.simulation:grantCoins(rollCost)
 		return response(player, false, "No rollable machines are configured")
 	end
 	state.inventory[definition.Id] = (state.inventory[definition.Id] or 0) + 1
 	profile.RollCount += 1
+	profile.NextRollAt = now + EconomyConfig.RollCooldownSeconds
 	player:SetAttribute("FactoryLastRoll", definition.Id)
 	player:SetAttribute("FactoryLastRarity", definition.Rarity)
 	AnalyticsService.record(player, "MachineRolled")
+	EffectService.fire(player, "InventoryChanged")
 	return response(player, true)
 end
 
@@ -145,6 +166,9 @@ local function sellMachine(player: Player, machineId: any, quantity: any)
 	local state = getState(player)
 	if not state then
 		return { Success = false, Reason = "Factory is not ready" }
+	end
+	if not dataIsReady(player) then
+		return response(player, false, "Factory data is loading")
 	end
 	if isRateLimited(player) then
 		return response(player, false, "Too many requests")
@@ -165,7 +189,8 @@ local function sellMachine(player: Player, machineId: any, quantity: any)
 		state.inventory[machineId] += quantity
 		return response(player, false, "Unable to credit resale")
 	end
-	AnalyticsService.record(player, "MachineSold", quantity)
+	AnalyticsService.record(player, "MachineRecycled", quantity)
+	EffectService.fire(player, "InventoryChanged")
 	return response(player, true)
 end
 
@@ -173,6 +198,9 @@ local function buyCapacity(player: Player)
 	local state = getState(player)
 	if not state then
 		return { Success = false, Reason = "Factory is not ready" }
+	end
+	if not dataIsReady(player) then
+		return response(player, false, "Factory data is loading")
 	end
 	if isRateLimited(player) then
 		return response(player, false, "Too many requests")
@@ -190,6 +218,7 @@ local function buyCapacity(player: Player)
 		return response(player, false, changeError)
 	end
 	AnalyticsService.record(player, "CapacityPurchased")
+	EffectService.fire(player, "InventoryChanged")
 	return response(player, true)
 end
 

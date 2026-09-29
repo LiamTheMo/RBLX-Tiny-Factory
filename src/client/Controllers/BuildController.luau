@@ -56,6 +56,7 @@ function BuildController.start()
 	local placeMachine = factoryRemotes:WaitForChild("PlaceMachine") :: RemoteFunction
 	local removeMachine = factoryRemotes:WaitForChild("RemoveMachine") :: RemoteFunction
 	local moveMachine = factoryRemotes:WaitForChild("MoveMachine") :: RemoteFunction
+	local presentationEvent = factoryRemotes:WaitForChild("PresentationEvent") :: RemoteEvent
 
 	local screenGui = Instance.new("ScreenGui")
 	screenGui.Name = "BuildHud"
@@ -244,7 +245,7 @@ function BuildController.start()
 		if inventoryCount == 0 then
 			local empty = Instance.new("TextLabel")
 			empty.BackgroundTransparency = 1
-			empty.Text = "No rolled machines yet — use the economy panel."
+			empty.Text = "No rolled machines yet — use ROLL FREE at the bottom."
 			empty.TextColor3 = Color3.fromRGB(190, 180, 170)
 			empty.Font = Enum.Font.Gotham
 			empty.TextSize = 11
@@ -300,7 +301,7 @@ function BuildController.start()
 			panelWidth = math.floor(math.clamp(viewportWidth * widthRatio, 232, 272))
 			panelWidth = math.min(panelWidth, math.max(184, viewportWidth - 16))
 		end
-		panel.Size = if compact then UDim2.fromOffset(panelWidth, 282) else UDim2.fromOffset(panelWidth, 380)
+		panel.Size = if compact then UDim2.fromOffset(panelWidth, 256) else UDim2.fromOffset(panelWidth, 380)
 		panel.Position = if compactLandscape
 			then UDim2.new(1, -panelWidth - 8, 0, 8)
 			elseif compact then UDim2.fromOffset(8, 214)
@@ -311,13 +312,13 @@ function BuildController.start()
 		status.Size = UDim2.new(1, -16, 0, if compact then 30 else 30)
 		inventoryTitle.Position = UDim2.fromOffset(8, if compact then 68 else 72)
 		inventoryTitle.Size = UDim2.new(1, -16, 0, if compact then 18 else 20)
-		inventoryList.Position = UDim2.fromOffset(8, if compact then 88 else 94)
-		inventoryList.Size = UDim2.new(1, -16, 0, if compact then 56 else 92)
-		slotsTitle.Position = UDim2.fromOffset(8, if compact then 150 else 190)
+		inventoryList.Position = UDim2.fromOffset(8, if compact then 86 else 94)
+		inventoryList.Size = UDim2.new(1, -16, 0, if compact then 48 else 92)
+		slotsTitle.Position = UDim2.fromOffset(8, if compact then 138 else 190)
 		slotsTitle.Size = UDim2.new(1, -16, 0, 18)
-		slotsList.Position = UDim2.fromOffset(8, if compact then 172 else 212)
-		slotsList.Size = UDim2.new(1, -16, 0, if compact then 50 else 58)
-		local actionY = if compact then 230 else 286
+		slotsList.Position = UDim2.fromOffset(8, if compact then 158 else 212)
+		slotsList.Size = UDim2.new(1, -16, 0, if compact then 42 else 58)
+		local actionY = if compact then 206 else 286
 		for index, button in ipairs({ remove, cancel, orientation }) do
 			button.Position = UDim2.new((index - 1) / 3, 6, 0, actionY)
 			button.Size = UDim2.new(1 / 3, -10, 0, if compact then 38 else 34)
@@ -336,6 +337,11 @@ function BuildController.start()
 	end
 	setStatus("Select a machine or a processor slot to begin.", nil)
 	refresh()
+	presentationEvent.OnClientEvent:Connect(function(eventName: string)
+		if eventName == "InventoryChanged" then
+			refresh()
+		end
+	end)
 end
 
 return BuildController
