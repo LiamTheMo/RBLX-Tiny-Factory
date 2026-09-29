@@ -1,14 +1,25 @@
 --!strict
 
+local EconomyConfig
+local EconomyRules
+if script ~= nil then
+	EconomyConfig = require(script.Parent.EconomyConfig)
+	EconomyRules = require(script.Parent.EconomyRules)
+else
+	EconomyConfig = require("./EconomyConfig")
+	EconomyRules = require("./EconomyRules")
+end
+
 export type MachineCategory = "Producer" | "Processor" | "Seller"
 
-export type MachineDefinition = {
+type MachineDefinitionSource = {
 	Id: string,
 	DisplayName: string,
 	Category: MachineCategory,
 	Description: string,
-	Rarity: string,
+	Rarity: string?,
 	Rollable: boolean,
+	RollChance: number?,
 	Behavior: string?,
 	SpawnInterval: number?,
 	OutputValue: number?,
@@ -18,7 +29,11 @@ export type MachineDefinition = {
 	TravelScale: number?,
 }
 
-local definitions: { [string]: MachineDefinition } = {
+export type MachineDefinition = MachineDefinitionSource & {
+	Rarity: string,
+}
+
+local definitionSources: { [string]: MachineDefinitionSource } = {
 	BasicDropper = {
 		Id = "BasicDropper",
 		DisplayName = "Basic Dropper",
@@ -34,8 +49,8 @@ local definitions: { [string]: MachineDefinition } = {
 		DisplayName = "Value Multiplier",
 		Category = "Processor",
 		Description = "Doubles the value of an item.",
-		Rarity = "Common",
 		Rollable = true,
+		RollChance = 30,
 		Behavior = "MultiplyValue",
 		Multiplier = 2,
 	},
@@ -52,8 +67,8 @@ local definitions: { [string]: MachineDefinition } = {
 		DisplayName = "Fast Dropper",
 		Category = "Producer",
 		Description = "Creates lower-value items at a faster rate.",
-		Rarity = "Uncommon",
 		Rollable = true,
+		RollChance = 5,
 		SpawnInterval = 0.5,
 		OutputValue = 1,
 	},
@@ -62,8 +77,8 @@ local definitions: { [string]: MachineDefinition } = {
 		DisplayName = "Heavy Dropper",
 		Category = "Producer",
 		Description = "Creates valuable items at a slower rate.",
-		Rarity = "Rare",
 		Rollable = true,
+		RollChance = 1.5,
 		SpawnInterval = 1.8,
 		OutputValue = 4,
 	},
@@ -72,8 +87,8 @@ local definitions: { [string]: MachineDefinition } = {
 		DisplayName = "Giantifier",
 		Category = "Processor",
 		Description = "Makes the item visibly larger.",
-		Rarity = "Common",
 		Rollable = true,
+		RollChance = 22,
 		Behavior = "ScaleVisual",
 		SizeScale = 1.8,
 	},
@@ -82,8 +97,8 @@ local definitions: { [string]: MachineDefinition } = {
 		DisplayName = "Paint Machine",
 		Category = "Processor",
 		Description = "Paints the item for later visual combinations.",
-		Rarity = "Common",
 		Rollable = true,
+		RollChance = 18,
 		Behavior = "SetMaterial",
 		VisualState = "Painted",
 	},
@@ -92,8 +107,8 @@ local definitions: { [string]: MachineDefinition } = {
 		DisplayName = "Compound Press",
 		Category = "Processor",
 		Description = "Compresses an item into a higher-value form.",
-		Rarity = "Uncommon",
 		Rollable = true,
+		RollChance = 4,
 		Behavior = "MultiplyValue",
 		Multiplier = 3,
 	},
@@ -102,8 +117,8 @@ local definitions: { [string]: MachineDefinition } = {
 		DisplayName = "Conveyor Booster",
 		Category = "Processor",
 		Description = "Speeds an item through downstream slots.",
-		Rarity = "Uncommon",
 		Rollable = true,
+		RollChance = 3.5,
 		Behavior = "AdjustThroughput",
 		TravelScale = 0.5,
 	},
@@ -112,8 +127,8 @@ local definitions: { [string]: MachineDefinition } = {
 		DisplayName = "Cooldown Tuner",
 		Category = "Processor",
 		Description = "Provides a smaller, reliable throughput improvement.",
-		Rarity = "Common",
 		Rollable = true,
+		RollChance = 15,
 		Behavior = "AdjustThroughput",
 		TravelScale = 0.75,
 	},
@@ -122,8 +137,8 @@ local definitions: { [string]: MachineDefinition } = {
 		DisplayName = "Duplicator",
 		Category = "Processor",
 		Description = "Creates one bounded additional item.",
-		Rarity = "Epic",
 		Rollable = true,
+		RollChance = 0.7,
 		Behavior = "DuplicateItem",
 	},
 	Goldenizer = {
@@ -131,8 +146,8 @@ local definitions: { [string]: MachineDefinition } = {
 		DisplayName = "Goldenizer",
 		Category = "Processor",
 		Description = "Adds a golden visual state and a bounded value bonus.",
-		Rarity = "Epic",
 		Rollable = true,
+		RollChance = 0.2,
 		Behavior = "Goldenize",
 		Multiplier = 2,
 		VisualState = "Golden",
@@ -142,11 +157,36 @@ local definitions: { [string]: MachineDefinition } = {
 		DisplayName = "Lucky Modifier",
 		Category = "Processor",
 		Description = "Applies a predictable high-or-low value outcome.",
-		Rarity = "Legendary",
 		Rollable = true,
+		RollChance = 0.1,
 		Behavior = "RandomMultiplier",
 	},
 }
+
+local totalRollChance = 0
+for _, definition in pairs(definitionSources) do
+	if definition.Rollable and type(definition.RollChance) == "number" then
+		totalRollChance += definition.RollChance
+	end
+end
+
+local definitions: { [string]: MachineDefinition } = {}
+for machineId, source in pairs(definitionSources) do
+	local rarity = source.Rarity
+	if source.Rollable then
+		local chance = source.RollChance
+		if type(chance) ~= "number" or chance <= 0 or totalRollChance <= 0 then
+			error(`Rollable machine {machineId} needs a positive RollChance`)
+		end
+		rarity = EconomyRules.getRarityFromOdds(totalRollChance / chance)
+	end
+	if not rarity then
+		error(`Machine {machineId} has no valid rarity`)
+	end
+	local definition = table.clone(source)
+	definition.Rarity = rarity
+	definitions[machineId] = definition :: MachineDefinition
+end
 
 local MachineDefinitions = {}
 
@@ -171,8 +211,40 @@ end
 function MachineDefinitions.validate(): (boolean, string?)
 	local producerCount = 0
 	local sellerCount = 0
+	local totalRollChance = 0
+	local seenRollChances: { [number]: string } = {}
 
 	for machineId, definition in pairs(definitions) do
+		if definition.Rollable then
+			local chance = definition.RollChance
+			if type(chance) ~= "number" or chance <= 0 then
+				return false, `Rollable machine {machineId} must have a positive RollChance`
+			end
+			if seenRollChances[chance] then
+				return false, `Rollable machines {seenRollChances[chance]} and {machineId} must have different chances`
+			end
+			seenRollChances[chance] = machineId
+			totalRollChance += chance
+		elseif definition.RollChance ~= nil then
+			return false, `Non-rollable machine {machineId} cannot have a RollChance`
+		end
+	end
+
+	if math.abs(totalRollChance - EconomyConfig.MachineRollChanceTotal) > 0.000001 then
+		return false, `Machine roll chances must total {EconomyConfig.MachineRollChanceTotal}%`
+	end
+
+	for machineId, definition in pairs(definitions) do
+		if definition.Rollable then
+			local chance = definition.RollChance
+			if type(chance) ~= "number" then
+				return false, `Rollable machine {machineId} must have a numeric RollChance`
+			end
+			local expectedRarity = EconomyRules.getRarityFromOdds(totalRollChance / chance)
+			if definition.Rarity ~= expectedRarity then
+				return false, `Machine {machineId} rarity does not match its chance threshold`
+			end
+		end
 		if definition.Id ~= machineId then
 			return false, `Machine ID mismatch for {machineId}`
 		end
