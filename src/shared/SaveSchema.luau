@@ -13,7 +13,7 @@ local MachineDefinitions = requireSibling("MachineDefinitions")
 local PlacementRules = requireSibling("PlacementRules")
 
 local SaveSchema = {}
-SaveSchema.CurrentVersion = 1
+SaveSchema.CurrentVersion = 2
 
 local function defaultData(): { [string]: any }
 	return {
@@ -45,7 +45,31 @@ function SaveSchema.migrate(raw: any): { [string]: any }
 		migrated[key] = value
 	end
 	if version == 0 then
-		migrated.SchemaVersion = SaveSchema.CurrentVersion
+		version = 1
+		migrated.SchemaVersion = version
+	end
+	if version == 1 then
+		local legacyLayout = migrated.Layout
+		if type(legacyLayout) == "table" and legacyLayout[5] == "Seller" then
+			local compactLayout = table.clone(legacyLayout)
+			local overflowMachineId = compactLayout[4]
+			if type(overflowMachineId) == "string" then
+				local definition = MachineDefinitions.get(overflowMachineId)
+				if definition and definition.Rollable then
+					local inventory = if type(migrated.Inventory) == "table" then table.clone(migrated.Inventory) else {}
+					local existing = inventory[overflowMachineId]
+					inventory[overflowMachineId] = (if type(existing) == "number" and existing % 1 == 0 and existing > 0 then existing else 0) + 1
+					migrated.Inventory = inventory
+				end
+			end
+			compactLayout[4] = "Seller"
+			compactLayout[5] = nil
+			migrated.Layout = compactLayout
+		end
+		if type(migrated.Capacity) == "number" then
+			migrated.Capacity = math.min(migrated.Capacity, FactoryConfig.MaxFactoryCapacity)
+		end
+		migrated.SchemaVersion = 2
 	end
 	return migrated
 end

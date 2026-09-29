@@ -140,11 +140,9 @@ local blockedInventory = EconomyRules.canRoll(13, 15, 200)
 expect(not blockedInventory, "full inventory should reject rolls")
 
 local firstCapacityCost = EconomyRules.getCapacityCost(1)
-local secondCapacityCost = EconomyRules.getCapacityCost(2)
-local maxCapacityCost = EconomyRules.getCapacityCost(3)
+local maxCapacityCost = EconomyRules.getCapacityCost(2)
 expect(firstCapacityCost == 25, "first capacity expansion cost is incorrect")
-expect(secondCapacityCost == 100, "second capacity expansion cost is incorrect")
-expect(not maxCapacityCost, "maximum capacity must not have another upgrade")
+expect(not maxCapacityCost, "maximum four-area capacity must not have another upgrade")
 
 expect(EconomyRules.getResaleValue("Common") == 0, "free rolls must not mint Coins through resale")
 

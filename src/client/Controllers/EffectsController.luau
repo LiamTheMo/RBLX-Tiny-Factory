@@ -71,7 +71,7 @@ function EffectsController.start()
 	overlay.Name = "CutsceneOverlay"
 	overlay.Size = UDim2.fromScale(1, 1)
 	overlay.BackgroundColor3 = Color3.fromRGB(10, 10, 20)
-	overlay.BackgroundTransparency = 0.35
+	overlay.BackgroundTransparency = 1
 	overlay.BorderSizePixel = 0
 	overlay.Visible = false
 	overlay.Parent = gui
@@ -93,6 +93,8 @@ function EffectsController.start()
 	card.Position = UDim2.fromScale(0.5, 0.5)
 	card.Size = UDim2.new(0.9, 0, 0, 96)
 	card.BackgroundColor3 = Color3.fromRGB(34, 30, 42)
+	card.BackgroundTransparency = 1
+	card.BorderSizePixel = 0
 	card.TextColor3 = Color3.new(1, 1, 1)
 	card.Font = Enum.Font.GothamBlack
 	card.TextScaled = true
@@ -105,13 +107,6 @@ function EffectsController.start()
 	local sizeLimit = Instance.new("UISizeConstraint")
 	sizeLimit.MaxSize = Vector2.new(600, 96)
 	sizeLimit.Parent = card
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 16)
-	corner.Parent = card
-	local stroke = Instance.new("UIStroke")
-	stroke.Thickness = 4
-	stroke.Color = getRarityColor("Common")
-	stroke.Parent = card
 	local scale = Instance.new("UIScale")
 	scale.Parent = card
 	local pulse: Tween? = nil
@@ -154,9 +149,11 @@ function EffectsController.start()
 			pulse:Cancel()
 		end
 		overlay.Visible = true
+		overlay.BackgroundTransparency = 1
 		heading.Text = "ROLLING A MACHINE"
+		heading.TextColor3 = Color3.new(1, 1, 1)
 		card.Text = "? ? ?"
-		stroke.Color = getRarityColor("Common")
+		card.TextColor3 = Color3.new(1, 1, 1)
 		scale.Scale = 1
 		pulse = TweenService:Create(scale, TweenInfo.new(0.42, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { Scale = 1.07 })
 		pulse:Play()
@@ -173,14 +170,15 @@ function EffectsController.start()
 		heading.Text = "ULTRA RARE MACHINE!"
 		local rarity = payload.Rarity or "Legendary"
 		local rarityColor = getRarityColor(rarity)
-		stroke.Color = rarityColor
+		heading.TextColor3 = rarityColor
+		card.TextColor3 = Color3.new(1, 1, 1)
 		card.Text = string.format("%s · %s", payload.MachineName or "New machine", payload.Odds or "1/?")
 		scale.Scale = 0.72
 		TweenService:Create(scale, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
 		task.delay(EconomyConfig.UltraRareCutscene.DurationSeconds, function()
 			if token == sequence then
 				overlay.Visible = false
-				overlay.BackgroundTransparency = 0.35
+				overlay.BackgroundTransparency = 1
 				showToast("Ultra rare roll!", rarityColor)
 			end
 		end)
@@ -193,7 +191,9 @@ function EffectsController.start()
 			pulse:Cancel()
 		end
 		overlay.Visible = true
+		overlay.BackgroundTransparency = 1
 		heading.Text = "ROLLING A MACHINE"
+		heading.TextColor3 = Color3.new(1, 1, 1)
 		local basePool = MachineDefinitions.getRollPool()
 		local luckMultiplier = payload.LuckMultiplier or 1
 		local pool = EconomyRules.getLuckAdjustedRollPool(basePool, luckMultiplier)
@@ -209,7 +209,7 @@ function EffectsController.start()
 				local sampleOdds = EconomyRules.getMachineOddsLabel(sample.Id, pool) or "1/?"
 				card.Text = string.format("%s · %s", sample.DisplayName, sampleOdds)
 				local sampleRarity = EconomyRules.getMachineRarity(sample.Id, pool) or sample.Rarity
-				stroke.Color = getRarityColor(sampleRarity)
+				card.TextColor3 = getRarityColor(sampleRarity)
 				card.Rotation = if index % 2 == 0 then 2 else -2
 				task.wait(0.045 + index * 0.005)
 			end
@@ -218,8 +218,9 @@ function EffectsController.start()
 			end
 			card.Rotation = 0
 			card.Text = if definition and odds then string.format("%s · %s", definition.DisplayName, odds) else "New machine"
-			stroke.Color = getRarityColor(rarity)
+			card.TextColor3 = Color3.new(1, 1, 1)
 			heading.Text = string.upper(rarity) .. " MACHINE!"
+			heading.TextColor3 = getRarityColor(rarity)
 			scale.Scale = 1.25
 			TweenService:Create(scale, TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
 			local oddsDenominator = if definition then EconomyRules.getMachineOddsDenominator(definition.Id, pool) else nil
