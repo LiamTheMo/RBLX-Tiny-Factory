@@ -105,6 +105,17 @@ local success, message = pcall(function()
 	effects.play("MachineRolled", { MachineId = second.LastRoll, Rarity = second.LastRarity })
 	local overlay = player.PlayerGui.FactoryEffects.CutsceneOverlay
 	assert(overlay.Visible, "roll cutscene did not open")
+	task.wait(0.12)
+	local rollingText = overlay.RevealCard.Text
+	assert(rollingText:find("1/", 1, true) and rollingText:find("·", 1, true), "rolling animation should show odds and rarity in one line")
+	local showsRollingRarity = false
+	for _, band in ipairs(require(ReplicatedStorage.Shared.EconomyConfig).RarityOddsBands) do
+		if rollingText:find(band.Name, 1, true) then
+			showsRollingRarity = true
+			break
+		end
+	end
+	assert(showsRollingRarity, "rolling animation should show the sampled machine rarity")
 	local secondMachine = definition.get(second.LastRoll)
 	assert(secondMachine, "second rolled machine definition missing")
 	assert(secondMachine.Rarity == economyRules.getRarityFromOdds(100 / secondMachine.RollChance), "second machine rarity did not follow its chance")
@@ -112,6 +123,14 @@ local success, message = pcall(function()
 	task.wait(1.7)
 	assert(overlay.Heading.Text == string.upper(secondMachine.Rarity) .. " MACHINE!", "roll reveal rarity did not match the chance-derived tier")
 	assert(secondOdds and overlay.RevealCard.Text:find(secondOdds, 1, true), "roll reveal omitted machine odds")
+	assert(overlay.RevealCard.Text:find(secondMachine.Rarity, 1, true), "roll reveal omitted rarity from its one-line result")
+	assert(overlay.RevealCard.TextWrapped == false, "roll reveal text should stay on one line")
+	local textLimit = overlay.RevealCard:FindFirstChildOfClass("UITextSizeConstraint")
+	assert(textLimit and textLimit.MaxTextSize <= 13, "roll reveal text should use a compact font")
+	effects.play("UltraRareRollCutscene", { MachineName = "Test Machine", Rarity = "Legendary", Odds = "1/10001" })
+	task.wait(0.1)
+	assert(overlay.Visible and overlay.Heading.Text == "ULTRA RARE MACHINE!", "ultra-rare cutscene test event did not open")
+	assert(overlay.RevealCard.Text:find("1/10001", 1, true), "ultra-rare cutscene omitted test odds")
 	task.wait(0.15)
 	local recycled = recycle:InvokeServer(second.LastRoll, 1)
 	assert(recycled.Success, "free-roll recycling failed")
