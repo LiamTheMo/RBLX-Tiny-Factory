@@ -196,11 +196,12 @@ function EconomyController.start()
 		capacity.Text = if state.CapacityCost then `Buy capacity · {state.CapacityCost} Coins` else "Capacity MAX"
 		clearDynamicChildren(inventoryList)
 		local count = 0
+		local rollPool = MachineDefinitions.getRollPool()
 		for machineId, quantity in pairs(state.Inventory or {}) do
 			if quantity > 0 then
 				count += 1
 				local definition = MachineDefinitions.get(machineId)
-				local odds = if definition and definition.Rollable then EconomyRules.getMachineOddsLabel(definition.Rarity, MachineDefinitions.getRollPool()) else nil
+				local odds = if definition and definition.Rollable then EconomyRules.getMachineOddsLabel(machineId, rollPool) else nil
 				local oddsSuffix = if odds then ` [{odds}]` else ""
 				local machineName = definition and definition.DisplayName or machineId
 				local button = createButton(inventoryList, `Sell_{machineId}`, `Recycle {machineName}{oddsSuffix} ×{quantity}`)
@@ -240,7 +241,7 @@ function EconomyController.start()
 		if response and response.Success then
 			local definition = response.LastRoll and MachineDefinitions.get(response.LastRoll)
 			local rarity = definition and definition.Rarity or response.LastRarity or "Unknown"
-			local odds = if definition and definition.Rollable then EconomyRules.getMachineOddsLabel(definition.Rarity, MachineDefinitions.getRollPool()) else nil
+			local odds = if definition and definition.Rollable then EconomyRules.getMachineOddsLabel(definition.Id, MachineDefinitions.getRollPool()) else nil
 			local machineName = definition and definition.DisplayName or response.LastRoll or "Machine"
 			result.Text = if odds then `Rolled: {machineName} ({rarity} · {odds})` else `Rolled: {machineName} ({rarity})`
 			setStatus("Machine added to inventory.", true)
