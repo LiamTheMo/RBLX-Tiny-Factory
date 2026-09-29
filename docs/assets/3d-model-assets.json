@@ -7,7 +7,7 @@
     "dimensions": "1024x1024",
     "quality": 94
   },
-  "totalSourceBytes": 44145008,
+  "totalSourceBytes": 43731812,
   "assets": [
     {
       "key": "r1c1_grass_platform",
@@ -508,7 +508,7 @@
       "row": 2,
       "column": 3,
       "assetId": 0,
-      "sourceSha256": "3a8843bafa4f0bd787ce31b6ceefcc08518dca7e648e7714b6242dee0a9881ff",
+      "sourceSha256": "bcefd9307f84c2d5decbc57ed3a4dacaef73d98544ac11dd8a7ae7199d7cc6c1",
       "assetSha256": "",
       "triangles": 8691,
       "textureDimensions": "1024x1024 JPEG"
@@ -628,10 +628,10 @@
       "row": 4,
       "column": 1,
       "assetId": 0,
-      "sourceSha256": "03bcefa5429de762ce9213a276253687e1f0e1c5989e1b1e13df6c6d33ec37e9",
+      "sourceSha256": "5dd30e47c811e95223df9720115b2e10d38a53608f83345e4876d981cdac676d",
       "assetSha256": "",
       "triangles": 12331,
-      "textureDimensions": "1024x1024 JPEG"
+      "textureDimensions": "512x512 JPEG"
     },
     {
       "key": "s2_r4c2_player_plot_land",

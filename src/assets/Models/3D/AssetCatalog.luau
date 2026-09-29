@@ -449,7 +449,7 @@ return {
 		Pack = 2,
 		Row = 2,
 		Column = 3,
-		SourceSha256 = "3a8843bafa4f0bd787ce31b6ceefcc08518dca7e648e7714b6242dee0a9881ff",
+		SourceSha256 = "bcefd9307f84c2d5decbc57ed3a4dacaef73d98544ac11dd8a7ae7199d7cc6c1",
 	},
 	{
 		Key = "s2_r2c4_winding_stream_bend",
@@ -549,7 +549,7 @@ return {
 		Pack = 2,
 		Row = 4,
 		Column = 1,
-		SourceSha256 = "03bcefa5429de762ce9213a276253687e1f0e1c5989e1b1e13df6c6d33ec37e9",
+		SourceSha256 = "5dd30e47c811e95223df9720115b2e10d38a53608f83345e4876d981cdac676d",
 	},
 	{
 		Key = "s2_r4c2_player_plot_land",
