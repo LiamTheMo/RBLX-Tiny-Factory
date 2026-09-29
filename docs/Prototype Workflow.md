@@ -6,8 +6,8 @@ Players roll machines for free every three seconds, buy limited capacity with Co
 
 ## Build and test
 
-1. Run \`rojo build default.project.json --output TinyFactory.rbxlx\`.
-2. Open the built place in Roblox Studio, or use \`rojo serve default.project.json\` for live code and Workspace synchronization.
+1. Run `rojo build default.project.json --output TinyFactory.rbxlx`.
+2. Open the built place in Roblox Studio, or use `rojo serve default.project.json` for live code and Workspace synchronization.
 3. Playtest the loop: roll, wait for cooldown, click both empty and occupied conveyor areas, place or move a machine, watch cubes fall onto the conveyor and reach the Seller, buy capacity, run over Coin and Luck boosters, and reconnect to check persistence.
 4. Test desktop, phone, and two-player Studio sessions before publishing. The server owns cooldowns, machine grants, booster selection, placement, and rewards.
 
