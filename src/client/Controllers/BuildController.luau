@@ -227,11 +227,12 @@ function BuildController.start()
 		clearDynamicChildren(slotsList)
 
 		local inventoryCount = 0
+		local rollPool = MachineDefinitions.getRollPool()
 		for machineId, quantity in pairs(state.Inventory or {}) do
 			if quantity > 0 then
 				inventoryCount += 1
 				local definition = MachineDefinitions.get(machineId)
-				local odds = if definition and definition.Rollable then EconomyRules.getMachineOddsLabel(definition.Rarity, MachineDefinitions.getRollPool()) else nil
+				local odds = if definition and definition.Rollable then EconomyRules.getMachineOddsLabel(machineId, rollPool) else nil
 				local oddsSuffix = if odds then ` [{odds}]` else ""
 				local machineName = definition and definition.DisplayName or machineId
 				local button = createButton(inventoryList, `Machine_{machineId}`, `{machineName}{oddsSuffix} ×{quantity}`)
