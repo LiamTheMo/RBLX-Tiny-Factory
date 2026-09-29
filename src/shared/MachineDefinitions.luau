@@ -168,7 +168,7 @@ for machineId, source in pairs(definitionSources) do
 	local rarity = source.Rarity
 	if source.Rollable then
 		local chance = source.RollChance
-		if type(chance) ~= "number" or chance <= 0 or totalRollChance <= 0 then
+		if type(chance) ~= "number" or chance <= 0 or EconomyConfig.MachineRollChanceTotal <= 0 then
 			error(`Rollable machine {machineId} needs a positive RollChance`)
 		end
 		rarity = EconomyRules.getRarityFromOdds(EconomyConfig.MachineRollChanceTotal / chance)
