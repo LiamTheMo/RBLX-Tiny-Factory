@@ -43,8 +43,8 @@ function EconomyRules.getRarityFromOdds(denominator: any): string?
 	return nil
 end
 
--- RollChance values are percentage weights whose configured total is 100.
-function EconomyRules.getMachineOddsLabel(machineId: any, rollPool: { [number]: any }): string?
+-- Returns the exact reciprocal chance for a machine, based on the configured roll pool.
+function EconomyRules.getMachineOddsDenominator(machineId: any, rollPool: { [number]: any }): number?
 	if type(machineId) ~= "string" or type(rollPool) ~= "table" then
 		return nil
 	end
@@ -62,8 +62,24 @@ function EconomyRules.getMachineOddsLabel(machineId: any, rollPool: { [number]: 
 	if not machineChance or totalChance <= 0 then
 		return nil
 	end
+	return totalChance / machineChance
+end
 
-	local denominator = totalChance / machineChance
+function EconomyRules.shouldPlayUltraRareCutscene(oddsDenominator: any): boolean
+	return type(oddsDenominator) == "number"
+		and oddsDenominator > EconomyConfig.UltraRareCutscene.MinimumOddsDenominator
+end
+
+-- RollChance values are percentage weights whose configured total is 100.
+function EconomyRules.getMachineOddsLabel(machineId: any, rollPool: { [number]: any }): string?
+	if type(machineId) ~= "string" or type(rollPool) ~= "table" then
+		return nil
+	end
+
+	local denominator = EconomyRules.getMachineOddsDenominator(machineId, rollPool)
+	if not denominator then
+		return nil
+	end
 	local rounded = math.floor(denominator * 10 + 0.5) / 10
 	local denominatorText = if rounded % 1 == 0 then string.format("%.0f", rounded) else string.format("%.1f", rounded)
 	return "1/" .. denominatorText

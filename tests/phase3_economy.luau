@@ -18,6 +18,13 @@ expect(secondRollCost == 0, "every roll should be free")
 local rollPool = MachineDefinitions.getRollPool()
 local rarityBands = EconomyConfig.RarityOddsBands
 local seenRarities: { [string]: boolean } = {}
+local expectedRarityColors = {
+	Common = { 217, 217, 222 },
+	Uncommon = { 191, 232, 197 },
+	Rare = { 184, 216, 240 },
+	Epic = { 215, 184, 232 },
+	Legendary = { 240, 168, 143 },
+}
 local previousMaxDenominator = 0
 expect(#rarityBands > 0, "at least one rarity band must be configured")
 for index, band in ipairs(rarityBands) do
@@ -32,6 +39,10 @@ for index, band in ipairs(rarityBands) do
 	for _, channel in ipairs(color) do
 		expect(type(channel) == "number" and channel % 1 == 0 and channel >= 0 and channel <= 255, "rarity display colors must use RGB channels from 0 to 255")
 	end
+	local expectedColor = expectedRarityColors[rarityName]
+	if expectedColor then
+		expect(color[1] == expectedColor[1] and color[2] == expectedColor[2] and color[3] == expectedColor[3], `{rarityName} pastel color is incorrect`)
+	end
 	expect(EconomyRules.getRarityFromOdds(maxDenominator) == rarityName, "each configured odds limit must map to its rarity")
 	if index < #rarityBands then
 		local nextBand = assert(rarityBands[index + 1])
@@ -44,6 +55,9 @@ expect(finalRarityBand.Name == "Legendary" and finalRarityBand.MaxDenominator ==
 expect(EconomyRules.getRarityFromOdds(1) == rarityBands[1].Name, "1/1 should use the most common configured band")
 expect(EconomyRules.getRarityFromOdds(12) == "Common", "1/12 should be Common in the configured bands")
 expect(not EconomyRules.getRarityFromOdds(0), "zero denominator should not have a rarity")
+expect(EconomyRules.getMachineOddsDenominator("FastDropper", rollPool) == 20, "machine odds denominator should follow its configured weight")
+expect(not EconomyRules.shouldPlayUltraRareCutscene(10000), "the ultra-rare cutscene should not include the exact 1/10,000 boundary")
+expect(EconomyRules.shouldPlayUltraRareCutscene(10000.01), "the ultra-rare cutscene should include odds rarer than 1/10,000")
 expect(not EconomyRules.getMachineOddsLabel("Seller", rollPool), "non-rollable machines should not have roll odds")
 local totalChance = 0
 for _, definition in ipairs(rollPool) do
