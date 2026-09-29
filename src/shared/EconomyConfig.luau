@@ -5,11 +5,15 @@ return {
 	MaxInventoryMachines = 200,
 	CapacityCosts = { 25, 100 },
 	MachineRollChanceTotal = 100,
+	UltraRareCutscene = {
+		MinimumOddsDenominator = 10000,
+		DurationSeconds = 2.4,
+	},
 	RarityOddsBands = {
-		{ Name = "Common", MaxDenominator = 100, Color = { 225, 225, 225 } },
-		{ Name = "Uncommon", MaxDenominator = 500, Color = { 110, 239, 151 } },
-		{ Name = "Rare", MaxDenominator = 2500, Color = { 99, 178, 255 } },
-		{ Name = "Epic", MaxDenominator = 10000, Color = { 195, 116, 255 } },
-		{ Name = "Legendary", MaxDenominator = math.huge, Color = { 255, 202, 70 } },
+		{ Name = "Common", MaxDenominator = 100, Color = { 217, 217, 222 } }, -- #D9D9DE light pastel grey
+		{ Name = "Uncommon", MaxDenominator = 500, Color = { 191, 232, 197 } }, -- #BFE8C5 pastel light green
+		{ Name = "Rare", MaxDenominator = 2500, Color = { 184, 216, 240 } }, -- #B8D8F0 pastel baby blue
+		{ Name = "Epic", MaxDenominator = 10000, Color = { 215, 184, 232 } }, -- #D7B8E8 pastel purple
+		{ Name = "Legendary", MaxDenominator = math.huge, Color = { 240, 168, 143 } }, -- #F0A88F pastel orange-red
 	},
 }
