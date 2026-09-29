@@ -163,13 +163,6 @@ local definitionSources: { [string]: MachineDefinitionSource } = {
 	},
 }
 
-local totalRollChance = 0
-for _, definition in pairs(definitionSources) do
-	if definition.Rollable and type(definition.RollChance) == "number" then
-		totalRollChance += definition.RollChance
-	end
-end
-
 local definitions: { [string]: MachineDefinition } = {}
 for machineId, source in pairs(definitionSources) do
 	local rarity = source.Rarity
@@ -178,7 +171,7 @@ for machineId, source in pairs(definitionSources) do
 		if type(chance) ~= "number" or chance <= 0 or totalRollChance <= 0 then
 			error(`Rollable machine {machineId} needs a positive RollChance`)
 		end
-		rarity = EconomyRules.getRarityFromOdds(totalRollChance / chance)
+		rarity = EconomyRules.getRarityFromOdds(EconomyConfig.MachineRollChanceTotal / chance)
 	end
 	if not rarity then
 		error(`Machine {machineId} has no valid rarity`)
@@ -240,7 +233,7 @@ function MachineDefinitions.validate(): (boolean, string?)
 			if type(chance) ~= "number" then
 				return false, `Rollable machine {machineId} must have a numeric RollChance`
 			end
-			local expectedRarity = EconomyRules.getRarityFromOdds(totalRollChance / chance)
+			local expectedRarity = EconomyRules.getRarityFromOdds(EconomyConfig.MachineRollChanceTotal / chance)
 			if definition.Rarity ~= expectedRarity then
 				return false, `Machine {machineId} rarity does not match its chance threshold`
 			end
