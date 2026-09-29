@@ -23,8 +23,10 @@ for _, band in ipairs(EconomyConfig.RarityOddsBands) do
 	rarityColors[band.Name] = Color3.fromRGB(color[1], color[2], color[3])
 end
 local firstRarityBand = EconomyConfig.RarityOddsBands[1]
-local defaultRarityColor = if firstRarityBand then rarityColors[firstRarityBand.Name] else nil
-defaultRarityColor = defaultRarityColor or Color3.new(1, 1, 1)
+local defaultRarityColor = Color3.new(1, 1, 1)
+if firstRarityBand then
+	defaultRarityColor = rarityColors[firstRarityBand.Name] or defaultRarityColor
+end
 
 local function getRarityColor(rarity: string): Color3
 	return rarityColors[rarity] or defaultRarityColor
@@ -172,14 +174,14 @@ function EffectsController.start()
 			end
 			card.Rotation = 0
 			card.Text = if definition and odds then `{definition.DisplayName} · {odds}` else definition and definition.DisplayName or "New machine"
-			stroke.Color = rarityColors[rarity] or getRarityColor("Common")
+			stroke.Color = getRarityColor(rarity)
 			heading.Text = string.upper(rarity) .. " MACHINE!"
 			scale.Scale = 1.25
 			TweenService:Create(scale, TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
 			task.wait(1.2)
 			if token == sequence then
 				overlay.Visible = false
-				showToast("Added to inventory", rarityColors[rarity] or getRarityColor("Common"))
+				showToast("Added to inventory", getRarityColor(rarity))
 			end
 		end)
 	end)
