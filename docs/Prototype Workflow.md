@@ -9,7 +9,7 @@ This branch keeps the first playable factory loop on a temporary baseplate. A dr
 3. Playtest the full loop: roll, wait for cooldown, place a rolled machine, watch an item reach the seller, buy capacity, collect a glowing Coin drop, and reconnect to check persistence.
 4. Test desktop, phone, and two-player Studio sessions before publishing. The roll button stays at the bottom center, while the server owns the cooldown and machine grant.
 
-`tests/studio/PrototypeSmoke.luau` is a repeatable local Studio playtest for the built place. Run it with Studio's `RunScript` command-line task and `--localPlaceFile TinyFactory.rbxlx`. It checks the roll dock label, per-machine odds in inventory and reveal, free roll and cooldown, placement, production and sale, recycling, capacity, loot claim, and duplicate-claim protection. The regular GitHub runner cannot execute this Studio-only test.
+`tests/studio/PrototypeSmoke.luau` is a repeatable local Studio playtest for the built place. Run it with Studio's `RunScript` command-line task and `--localPlaceFile TinyFactory.rbxlx`. It checks the roll dock label, per-machine odds in inventory and reveal, chance-derived machine rarities, free roll and cooldown, placement, production and sale, recycling, capacity, loot claim, and duplicate-claim protection. The regular GitHub runner cannot execute this Studio-only test.
 
 The event presentation registry is in `src/client/Controllers/EffectsController.luau`. Server systems announce moments through `EffectService.fire(player, eventName, payload)`. Add a new visual or short cutscene by registering an event handler in the client controller. These effects are cosmetic; the server owns inventory, RNG, loot rewards, production, and Coins.
 
