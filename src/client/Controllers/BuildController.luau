@@ -295,7 +295,7 @@ function BuildController.start()
 			button.BackgroundColor3 = if locked then COLORS.Locked elseif sourceSlot == slotIndex or targetSlot == slotIndex then COLORS.Selected else COLORS.Button
 			button.TextSize = if compact then 10 else 11
 			button.Activated:Connect(function()
-				handleSlot(slotIndex, true)
+				handleSlot(slotIndex)
 			end)
 		end
 	end
@@ -315,7 +315,7 @@ function BuildController.start()
 		instance.MouseClick:Connect(function(clicker: Player)
 			if clicker ~= player then return end
 			local slotIndex = instance:GetAttribute("FactorySlotIndex")
-			if type(slotIndex) == "number" then handleSlot(slotIndex) end
+			if type(slotIndex) == "number" then handleSlot(slotIndex, true) end
 		end)
 	end
 	for _, instance in ipairs(plotsFolder:GetDescendants()) do connectPhysicalSlot(instance) end
