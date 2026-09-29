@@ -3,7 +3,7 @@
 return {
 	RollCooldownSeconds = 3,
 	MaxInventoryMachines = 200,
-	CapacityCosts = { 25, 100 },
+	CapacityCosts = { 25 },
 	MachineRollChanceTotal = 100,
 	MaxLuckMultiplier = 2,
 	UltraRareCutscene = {

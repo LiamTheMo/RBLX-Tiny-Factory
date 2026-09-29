@@ -13,7 +13,7 @@ expect(defaultData.SchemaVersion == SaveSchema.CurrentVersion, "default data mus
 expect(defaultData.Capacity == 1, "default capacity should be one")
 expect(type(defaultData.Analytics) == "table", "default data must include bounded analytics storage")
 expect(defaultData.Layout[1] == FactoryLayout.Default[1], "default producer must be persisted")
-expect(defaultData.Layout[5] == FactoryLayout.Default[5], "default seller must be persisted")
+expect(defaultData.Layout[4] == FactoryLayout.Default[4], "default seller must be persisted in area four")
 
 local safe = SaveSchema.sanitize({
 	Coins = 9_999_999_999,
@@ -58,6 +58,18 @@ expect(invalidLayout.Layout[1] == FactoryLayout.Default[1], "invalid layouts mus
 local migrated = SaveSchema.sanitize({ Coins = 7, RollCount = 2 })
 expect(migrated.SchemaVersion == SaveSchema.CurrentVersion, "legacy data must migrate to the current schema")
 expect(migrated.Coins == 7 and migrated.RollCount == 2, "legacy values should be retained when valid")
+
+local migratedFiveAreaSave = SaveSchema.sanitize({
+	SchemaVersion = 1,
+	Coins = 7,
+	Capacity = 3,
+	Inventory = {},
+	Layout = { "BasicDropper", "Giantifier", "ValueMultiplier", "CooldownTuner", "Seller" },
+})
+expect(migratedFiveAreaSave.SchemaVersion == 2, "five-area saves must advance to the four-area schema")
+expect(migratedFiveAreaSave.Capacity == FactoryConfig.MaxFactoryCapacity, "legacy capacity must be clamped to the new slot count")
+expect(migratedFiveAreaSave.Layout[4] == "Seller" and migratedFiveAreaSave.Layout[5] == nil, "legacy Seller must move into the fourth area")
+expect(migratedFiveAreaSave.Inventory.CooldownTuner == 1, "a processor displaced by the smaller conveyor must return to inventory")
 
 local future = SaveSchema.sanitize({ SchemaVersion = SaveSchema.CurrentVersion + 1, Coins = 999 })
 expect(future.Coins == 0, "future schema data must not be trusted")
