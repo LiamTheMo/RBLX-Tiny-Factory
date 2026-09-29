@@ -6,6 +6,7 @@ local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local FactoryConfig = require(Shared:WaitForChild("FactoryConfig"))
+local MachineVisualConfig = require(Shared:WaitForChild("MachineVisualConfig"))
 local FactoryLayout = require(Shared:WaitForChild("FactoryLayout"))
 local FactorySimulation = require(Shared:WaitForChild("FactorySimulation"))
 local MachineDefinitions = require(Shared:WaitForChild("MachineDefinitions"))
@@ -113,56 +114,77 @@ local function refreshMachineVisuals(factory: any)
 		local belt = factory.plot:FindFirstChild(string.format("Conveyor_%d", slotIndex))
 		local detector = belt and belt:FindFirstChild("FactorySlotClick")
 		if detector and detector:IsA("ClickDetector") then
-			detector.MaxActivationDistance = if factory.layout[slotIndex] then 0 else 32
+			detector.MaxActivationDistance = 32
 		end
 	end
 
-	local colors = {
-		Producer = Color3.fromRGB(82, 145, 255),
-		Processor = Color3.fromRGB(255, 194, 66),
-		Seller = Color3.fromRGB(83, 207, 113),
-	}
-	local shapes = {
-		Producer = Enum.PartType.Cylinder,
-		Processor = Enum.PartType.Block,
-		Seller = Enum.PartType.Ball,
-	}
+	local function colorFromRgb(channels: { number }): Color3
+		return Color3.fromRGB(channels[1], channels[2], channels[3])
+	end
+
 	for slotIndex = 1, FactoryLayout.SlotCount do
 		local machineId = factory.layout[slotIndex]
 		if machineId then
 			local definition = MachineDefinitions.get(machineId)
 			if definition then
-				local machinePart = createPart(
-					machineFolder,
-					`Slot_{slotIndex}_{machineId}`,
-					Vector3.new(2, 2, 2),
-					factory.origin + Vector3.new((slotIndex - 1) * 6, 1.1, 0),
-					colors[definition.Category] or Color3.fromRGB(235, 235, 235)
-				)
-				machinePart.Shape = shapes[definition.Category] or Enum.PartType.Block
-				machinePart.Material = if definition.Rarity == "Legendary" or definition.Rarity == "Epic" then Enum.Material.Neon else Enum.Material.SmoothPlastic
-				machinePart:SetAttribute("MachineId", definition.Id)
-				machinePart:SetAttribute("DisplayName", definition.DisplayName)
-				machinePart:SetAttribute("Description", definition.Description)
-				addSlotClickDetector(machinePart, slotIndex)
-				machinePart:SetAttribute("Rarity", definition.Rarity)
-				machinePart:SetAttribute("Behavior", definition.Behavior or "Infrastructure")
+				local profileKey = definition.VisualStyle or (definition.Category == "Producer" and "Dropper") or definition.Category
+				local profile = MachineVisualConfig.Profiles[profileKey] or MachineVisualConfig.Profiles.Processor
+				local primaryColor = colorFromRgb(profile.PrimaryColor)
+				local accentColor = colorFromRgb(profile.AccentColor)
+				local basePosition = factory.origin + Vector3.new((slotIndex - 1) * MachineVisualConfig.SlotPitch, 0, 0)
+				local model = Instance.new("Model")
+				model.Name = string.format("Slot_%d_%s", slotIndex, machineId)
+				model.Parent = machineFolder
+
+				local function makePart(name: string, size: Vector3, offset: Vector3, color: Color3): Part
+					local part = createPart(model, name, size, basePosition + offset, color)
+					part.Material = Enum.Material.SmoothPlastic
+					return part
+				end
+
+				local clickPart: Part
+				if profile.Style == "Dropper" then
+					makePart("DropperFoot", Vector3.new(2.8, 0.3, 2.4), Vector3.new(0, 0.32, 0), accentColor)
+					makePart("DropperSupportLeft", Vector3.new(0.3, 2.2, 0.3), Vector3.new(0, 1.4, -0.86), accentColor)
+					makePart("DropperSupportRight", Vector3.new(0.3, 2.2, 0.3), Vector3.new(0, 1.4, 0.86), accentColor)
+					makePart("DropperHeadLeft", Vector3.new(0.62, 1.2, 1.8), Vector3.new(-0.78, 2.55, 0), primaryColor)
+					makePart("DropperHeadRight", Vector3.new(0.62, 1.2, 1.8), Vector3.new(0.78, 2.55, 0), primaryColor)
+					makePart("DropperNozzleLeft", Vector3.new(0.18, 0.5, 0.18), Vector3.new(-0.48, 1.65, 0), accentColor)
+					makePart("DropperNozzleRight", Vector3.new(0.18, 0.5, 0.18), Vector3.new(0.48, 1.65, 0), accentColor)
+					makePart("DropperNozzleNear", Vector3.new(0.18, 0.5, 0.18), Vector3.new(0, 1.65, -0.48), accentColor)
+					makePart("DropperNozzleFar", Vector3.new(0.18, 0.5, 0.18), Vector3.new(0, 1.65, 0.48), accentColor)
+					clickPart = makePart("DropperHousing", Vector3.new(2.2, 0.35, 2.0), Vector3.new(0, 3.25, 0), primaryColor)
+				elseif profile.Style == "Seller" then
+					makePart("SellerFoot", Vector3.new(2.8, 0.3, 2.4), Vector3.new(0, 0.32, 0), accentColor)
+					makePart("SellerTray", Vector3.new(2.4, 0.25, 2.1), Vector3.new(0, 0.62, 0), accentColor)
+					clickPart = makePart("SellerHousing", Vector3.new(1.8, 1.6, 1.7), Vector3.new(0, 1.62, 0), primaryColor)
+				else
+					makePart("ProcessorFoot", Vector3.new(2.8, 0.3, 2.4), Vector3.new(0, 0.32, 0), accentColor)
+					clickPart = makePart("ProcessorHousing", Vector3.new(2.1, 1.5, 1.9), Vector3.new(0, 1.25, 0), primaryColor)
+				end
+
+				addSlotClickDetector(clickPart, slotIndex)
+				clickPart:SetAttribute("MachineId", definition.Id)
+				clickPart:SetAttribute("DisplayName", definition.DisplayName)
+				clickPart:SetAttribute("Description", definition.Description)
+				clickPart:SetAttribute("Rarity", definition.Rarity)
+				clickPart:SetAttribute("Behavior", definition.Behavior or definition.Category)
 
 				local labelGui = Instance.new("BillboardGui")
 				labelGui.Name = "MachineLabel"
-				labelGui.Adornee = machinePart
+				labelGui.Adornee = clickPart
 				labelGui.AlwaysOnTop = true
 				labelGui.MaxDistance = 80
 				labelGui.Size = UDim2.fromOffset(150, 42)
 				labelGui.StudsOffset = Vector3.new(0, 1.7, 0)
-				labelGui.Parent = machinePart
+				labelGui.Parent = clickPart
 
 				local label = Instance.new("TextLabel")
 				label.BackgroundColor3 = Color3.fromRGB(28, 24, 21)
 				label.BackgroundTransparency = 0.2
 				label.BorderSizePixel = 0
 				label.Size = UDim2.fromScale(1, 1)
-				label.Text = `{definition.DisplayName}\n{definition.Rarity}`
+				label.Text = string.format("%s\n%s", definition.DisplayName, definition.Rarity)
 				label.TextColor3 = Color3.fromRGB(255, 255, 255)
 				label.TextSize = 11
 				label.TextWrapped = true
@@ -173,15 +195,28 @@ local function refreshMachineVisuals(factory: any)
 	end
 end
 
+local function getPhysicalSlotForRouteIndex(layout: FactoryLayout.Layout, routeIndex: number): number
+	local currentRouteIndex = 0
+	for slotIndex = 1, FactoryLayout.SlotCount do
+		if layout[slotIndex] then
+			currentRouteIndex += 1
+			if currentRouteIndex == routeIndex then
+				return slotIndex
+			end
+		end
+	end
+	return 1
+end
+
 local function updateVisualItems(factory: any)
 	local activeItems = factory.simulation:getActiveItemsForDebug()
-	local snapshot = factory.simulation:getSnapshot()
 	local activeById = {}
+	local visualConfig = MachineVisualConfig.ConveyorItem
 	for _, item in ipairs(activeItems) do
 		activeById[item.Id] = true
 		local visual = factory.visualItems[item.Id]
 		if not visual then
-			visual = createPart(factory.plot, `Item_{item.Id}`, Vector3.new(0.9, 0.9, 0.9), factory.origin + Vector3.new(0, 1, 0), Color3.fromRGB(235, 235, 235))
+			visual = createPart(factory.plot, string.format("Item_%d", item.Id), Vector3.new(visualConfig.Size, visualConfig.Size, visualConfig.Size), factory.origin + Vector3.new(0, visualConfig.DropStartHeight, 0), Color3.fromRGB(235, 235, 235))
 			factory.visualItems[item.Id] = visual
 		end
 		local stateColors = {
@@ -189,21 +224,26 @@ local function updateVisualItems(factory: any)
 			Painted = Color3.fromRGB(255, 105, 160),
 			Golden = Color3.fromRGB(255, 211, 66),
 		}
-		local size = 0.9 * math.clamp(item.SizeScale or 1, 0.5, 4)
+		local size = visualConfig.Size * math.clamp(item.SizeScale or 1, 0.5, 4)
 		visual.Size = Vector3.new(size, size, size)
 		visual.Color = stateColors[item.VisualState] or stateColors.Base
 
-		local routeMachineId = snapshot.Route[item.SlotIndex]
-		local visualSlotIndex = 1
-		for slotIndex = 1, FactoryLayout.SlotCount do
-			if factory.layout[slotIndex] == routeMachineId then
-				visualSlotIndex = slotIndex
-				break
+		local physicalSlotIndex = getPhysicalSlotForRouteIndex(factory.layout, item.SlotIndex)
+		local segmentProgress = 1 - math.clamp(item.TimeRemaining / FactoryConfig.TravelTimePerSlotSeconds, 0, 1)
+		local x = (physicalSlotIndex - 1) * MachineVisualConfig.SlotPitch
+		local y = visualConfig.LandingHeight
+		if item.SlotIndex == 1 then
+			local fallFraction = math.clamp(visualConfig.DropDurationSeconds / FactoryConfig.TravelTimePerSlotSeconds, 0.05, 0.9)
+			local fallProgress = math.clamp(segmentProgress / fallFraction, 0, 1)
+			local easedFall = fallProgress * fallProgress * (3 - 2 * fallProgress)
+			y = visualConfig.DropStartHeight + (visualConfig.LandingHeight - visualConfig.DropStartHeight) * easedFall
+			if segmentProgress > fallFraction then
+				x += ((segmentProgress - fallFraction) / (1 - fallFraction)) * MachineVisualConfig.SlotPitch
 			end
+		else
+			x += segmentProgress * MachineVisualConfig.SlotPitch
 		end
-		local progress = 1 - math.clamp(item.TimeRemaining / FactoryConfig.TravelTimePerSlotSeconds, 0, 1)
-		local x = (visualSlotIndex - 1) * 6 + progress * 6
-		visual.Position = factory.origin + Vector3.new(x, 1.05, 0)
+		visual.Position = factory.origin + Vector3.new(x, y, 0)
 		visual:SetAttribute("ItemValue", item.Value)
 	end
 
@@ -274,27 +314,34 @@ local function placeMachine(player: Player, machineId: any, slotIndex: any, repl
 	if previousMachineId and replaceRequested ~= true then
 		return buildResponse(factory, false, "Slot is occupied")
 	end
-	if previousMachineId and slotIndex == FactoryLayout.SellerSlotIndex then
-		return buildResponse(factory, false, "The seller is fixed infrastructure")
-	end
 	if (factory.inventory[machineId] or 0) <= 0 then
 		return buildResponse(factory, false, "Machine is not in inventory")
 	end
 
-	factory.inventory[machineId] -= 1
-	factory.layout[slotIndex] = machineId
-	if previousMachineId then
-		factory.inventory[previousMachineId] = (factory.inventory[previousMachineId] or 0) + 1
+	local candidate, candidateError = PlacementRules.createPlacementLayout(factory.layout, machineId, slotIndex, factory.capacity)
+	if not candidate then
+		return buildResponse(factory, false, candidateError)
 	end
-	local committed, commitError = commitLayout(factory, factory.layout)
-	if not committed then
-		factory.inventory[machineId] += 1
-		if previousMachineId then
-			factory.inventory[previousMachineId] -= 1
+	local nextInventory = copyInventory(factory.inventory)
+	nextInventory[machineId] = (nextInventory[machineId] or 0) - 1
+	if nextInventory[machineId] <= 0 then
+		nextInventory[machineId] = nil
+	end
+	if previousMachineId then
+		nextInventory[previousMachineId] = (nextInventory[previousMachineId] or 0) + 1
+	end
+	for otherSlot = 1, FactoryLayout.SlotCount do
+		local oldMachineId = factory.layout[otherSlot]
+		if otherSlot ~= slotIndex and oldMachineId and candidate[otherSlot] ~= oldMachineId then
+			nextInventory[oldMachineId] = (nextInventory[oldMachineId] or 0) + 1
 		end
-		factory.layout[slotIndex] = previousMachineId
+	end
+
+	local committed, commitError = commitLayout(factory, candidate)
+	if not committed then
 		return buildResponse(factory, false, commitError)
 	end
+	factory.inventory = nextInventory
 	AnalyticsService.record(player, "MachinePlaced")
 	EffectService.fire(player, "InventoryChanged")
 	return buildResponse(factory, true)
@@ -311,26 +358,23 @@ local function removeMachine(player: Player, slotIndex: any)
 	if isRateLimited(player) then
 		return buildResponse(factory, false, "Too many requests")
 	end
-	local valid, errorMessage = PlacementRules.validateSlotIndex(slotIndex)
-	if not valid then
-		return buildResponse(factory, false, errorMessage)
-	end
-	if slotIndex == 1 or slotIndex == FactoryLayout.SellerSlotIndex then
-		return buildResponse(factory, false, "The producer and seller are required")
-	end
 	local machineId = factory.layout[slotIndex]
 	if not machineId then
 		return buildResponse(factory, false, "Slot is already empty")
 	end
-
-	factory.layout[slotIndex] = nil
-	factory.inventory[machineId] = (factory.inventory[machineId] or 0) + 1
-	local committed, commitError = commitLayout(factory, factory.layout)
+	local definition = MachineDefinitions.get(machineId)
+	if definition and (definition.Category == "Producer" or definition.Category == "Seller") then
+		return buildResponse(factory, false, "Keep the dropper at the start and a seller at the route end")
+	end
+	local candidate, candidateError = PlacementRules.createRemoveLayout(factory.layout, slotIndex, factory.capacity)
+	if not candidate then
+		return buildResponse(factory, false, candidateError)
+	end
+	local committed, commitError = commitLayout(factory, candidate)
 	if not committed then
-		factory.inventory[machineId] -= 1
-		factory.layout[slotIndex] = machineId
 		return buildResponse(factory, false, commitError)
 	end
+	factory.inventory[machineId] = (factory.inventory[machineId] or 0) + 1
 	AnalyticsService.record(player, "MachineRemoved")
 	EffectService.fire(player, "InventoryChanged")
 	return buildResponse(factory, true)
@@ -347,32 +391,12 @@ local function moveMachine(player: Player, sourceSlotIndex: any, destinationSlot
 	if isRateLimited(player) then
 		return buildResponse(factory, false, "Too many requests")
 	end
-	local sourceValid, sourceError = PlacementRules.validateSlotIndex(sourceSlotIndex)
-	local destinationValid, destinationError = PlacementRules.validateSlotIndex(destinationSlotIndex)
-	if not sourceValid then
-		return buildResponse(factory, false, sourceError)
+	local candidate, candidateError = PlacementRules.createMoveLayout(factory.layout, sourceSlotIndex, destinationSlotIndex, factory.capacity)
+	if not candidate then
+		return buildResponse(factory, false, candidateError)
 	end
-	if not destinationValid then
-		return buildResponse(factory, false, destinationError)
-	end
-	local machineId = factory.layout[sourceSlotIndex]
-	if not machineId then
-		return buildResponse(factory, false, "Source slot is empty")
-	end
-	if factory.layout[destinationSlotIndex] then
-		return buildResponse(factory, false, "Destination slot is occupied")
-	end
-	local machineValid, machineError = PlacementRules.validateMachineForSlot(machineId, destinationSlotIndex)
-	if not machineValid then
-		return buildResponse(factory, false, machineError)
-	end
-
-	factory.layout[sourceSlotIndex] = nil
-	factory.layout[destinationSlotIndex] = machineId
-	local committed, commitError = commitLayout(factory, factory.layout)
+	local committed, commitError = commitLayout(factory, candidate)
 	if not committed then
-		factory.layout[destinationSlotIndex] = nil
-		factory.layout[sourceSlotIndex] = machineId
 		return buildResponse(factory, false, commitError)
 	end
 	AnalyticsService.record(player, "MachineMoved")

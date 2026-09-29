@@ -53,7 +53,7 @@ end
 function LootService.claim(player: Player, part: BasePart): boolean
 	local factory = FactoryService.getState(player)
 	if not factory or player:GetAttribute("FactoryDataReady") ~= true or not part:IsA("BasePart")
-		or part.Parent ~= getWorldFolder() or part:GetAttribute("Claimed") == true then
+		or part.Parent ~= getWorldFolder() or part:GetAttribute("Landed") ~= true or part:GetAttribute("Claimed") == true then
 		return false
 	end
 	local booster = BoosterRules.get(part:GetAttribute("BoosterId"))
@@ -81,9 +81,10 @@ local function connectTouchPickup(part: BasePart)
 	end)
 end
 
-local function addDisplay(part: BasePart, booster: any)
+local function addDisplay(part: BasePart, booster: any): BillboardGui
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "BoosterLabel"
+	billboard.Enabled = false
 	billboard.Adornee = part
 	billboard.AlwaysOnTop = true
 	billboard.MaxDistance = 70
@@ -104,6 +105,41 @@ local function addDisplay(part: BasePart, booster: any)
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 8)
 	corner.Parent = label
+	return billboard
+end
+
+local function findLandPosition(factory: any): Vector3?
+	local bounds = BoosterConfig.SpawnBounds
+	local rayConfig = BoosterConfig.LandRaycast
+	local fallConfig = BoosterConfig.Fall
+	local plotsFolder = workspace:FindFirstChild("TinyFactoryPlots")
+	local exclusions: { Instance } = {}
+	if plotsFolder then
+		table.insert(exclusions, plotsFolder)
+	end
+	table.insert(exclusions, getWorldFolder())
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player.Character then
+			table.insert(exclusions, player.Character)
+		end
+	end
+
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	rayParams.FilterDescendantsInstances = exclusions
+	rayParams.IgnoreWater = true
+	rayParams.RespectCanCollide = true
+
+	for _ = 1, rayConfig.PositionAttempts do
+		local x = random:NextNumber(bounds.MinX, bounds.MaxX)
+		local z = random:NextNumber(bounds.MinZ, bounds.MaxZ)
+		local rayOrigin = factory.origin + Vector3.new(x, rayConfig.StartHeight, z)
+		local result = workspace:Raycast(rayOrigin, Vector3.new(0, -rayConfig.Distance, 0), rayParams)
+		if result and result.Normal.Y >= rayConfig.MinimumGroundNormalY then
+			return result.Position + Vector3.new(0, fallConfig.LandingHeight, 0)
+		end
+	end
+	return nil
 end
 
 local function spawnLoot(player: Player)
@@ -116,34 +152,53 @@ local function spawnLoot(player: Player)
 	local boosterId = BoosterRules.pickBoosterId(random:NextNumber() * totalWeight)
 	local booster = BoosterRules.get(boosterId)
 	if not booster then return end
-	local bounds = BoosterConfig.SpawnBounds
-	local position = factory.origin + Vector3.new(random:NextNumber(bounds.MinX, bounds.MaxX), bounds.Height, random:NextNumber(bounds.MinZ, bounds.MaxZ))
+	local landingPosition = findLandPosition(factory)
+	if not landingPosition then
+		return
+	end
+	local fallConfig = BoosterConfig.Fall
 	local part = Instance.new("Part")
 	part.Name = "WorldBoosterDrop"
 	part.Shape = Enum.PartType.Ball
 	part.Material = Enum.Material.Neon
 	part.Color = Color3.fromRGB(booster.Color[1], booster.Color[2], booster.Color[3])
-	part.Size = Vector3.new(0.2, 0.2, 0.2)
+	part.Size = Vector3.new(fallConfig.StartingSize, fallConfig.StartingSize, fallConfig.StartingSize)
 	part.Transparency = 1
 	part.Anchored = true
 	part.CanCollide = false
-	part.CanTouch = true
-	part.Position = position
+	part.CanTouch = false
+	part.Position = landingPosition + Vector3.new(0, fallConfig.DropHeight, 0)
 	part:SetAttribute("BoosterId", booster.Id)
 	part:SetAttribute("SourcePlotUserId", player.UserId)
 	part:SetAttribute("Claimed", false)
+	part:SetAttribute("Landed", false)
 	part.Parent = folder
-	addDisplay(part, booster)
+	local billboard = addDisplay(part, booster)
 	connectTouchPickup(part)
 	local drops = activeDrops[player]
 	if not drops then drops = {}; activeDrops[player] = drops end
 	table.insert(drops, part)
-	TweenService:Create(part, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Size = Vector3.new(1.3, 1.3, 1.3), Transparency = 0 }):Play()
 	local light = Instance.new("PointLight")
 	light.Color = part.Color
 	light.Brightness = 1.5
 	light.Range = 10
+	light.Enabled = false
 	light.Parent = part
+	local landingTween = TweenService:Create(part, TweenInfo.new(fallConfig.DurationSeconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Position = landingPosition,
+		Size = Vector3.new(fallConfig.LandedSize, fallConfig.LandedSize, fallConfig.LandedSize),
+		Transparency = 0,
+	})
+	landingTween.Completed:Connect(function(playbackState)
+		if playbackState ~= Enum.PlaybackState.Completed or not part.Parent or part:GetAttribute("Claimed") == true then
+			return
+		end
+		part:SetAttribute("Landed", true)
+		part.CanTouch = true
+		billboard.Enabled = true
+		light.Enabled = true
+	end)
+	landingTween:Play()
 	task.delay(BoosterConfig.DespawnAfterSeconds, function()
 		if part.Parent then part:Destroy() end
 	end)

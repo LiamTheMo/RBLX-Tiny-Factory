@@ -15,7 +15,6 @@ local started = false
 local COLORS = {
 	Panel = Color3.fromRGB(28, 24, 21),
 	Button = Color3.fromRGB(46, 39, 34),
-	Selected = Color3.fromRGB(112, 77, 34),
 	Good = Color3.fromRGB(140, 235, 150),
 	Bad = Color3.fromRGB(255, 150, 120),
 	Text = Color3.fromRGB(255, 255, 255),
@@ -36,14 +35,6 @@ local function createButton(parent: Instance, name: string, text: string): TextB
 	return button
 end
 
-local function clearDynamicChildren(parent: Instance)
-	for _, child in ipairs(parent:GetChildren()) do
-		if not child:IsA("UIListLayout") then
-			child:Destroy()
-		end
-	end
-end
-
 function EconomyController.start()
 	if started then
 		return
@@ -55,8 +46,7 @@ function EconomyController.start()
 	local remotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Factory")
 	local getState = remotes:WaitForChild("GetEconomyState") :: RemoteFunction
 	local rollMachine = remotes:WaitForChild("RollMachine") :: RemoteFunction
-	local sellMachine = remotes:WaitForChild("SellMachine") :: RemoteFunction
-	local buyCapacity = remotes:WaitForChild("BuyCapacity") :: RemoteFunction
+		local buyCapacity = remotes:WaitForChild("BuyCapacity") :: RemoteFunction
 	local presentationEvent = remotes:WaitForChild("PresentationEvent") :: RemoteEvent
 
 	local screenGui = Instance.new("ScreenGui")
@@ -104,8 +94,8 @@ function EconomyController.start()
 	result.Font = Enum.Font.GothamBold
 	result.TextScaled = true
 	local resultTextLimit = Instance.new("UITextSizeConstraint")
-	resultTextLimit.MinTextSize = 12
-	resultTextLimit.MaxTextSize = 16
+	resultTextLimit.MinTextSize = 13
+	resultTextLimit.MaxTextSize = 18
 	resultTextLimit.Parent = result
 	result.Parent = panel
 
@@ -129,25 +119,6 @@ function EconomyController.start()
 	rollCorner.Parent = roll
 	local capacity = createButton(panel, "Capacity", "Buy capacity")
 
-	local inventoryTitle = Instance.new("TextLabel")
-	inventoryTitle.BackgroundTransparency = 1
-	inventoryTitle.Text = "Inventory — tap an item to recycle one"
-	inventoryTitle.TextColor3 = COLORS.Text
-	inventoryTitle.Font = Enum.Font.GothamBold
-	inventoryTitle.TextSize = 11
-	inventoryTitle.TextXAlignment = Enum.TextXAlignment.Left
-	inventoryTitle.Parent = panel
-
-	local inventoryList = Instance.new("ScrollingFrame")
-	inventoryList.Name = "InventoryList"
-	inventoryList.BackgroundTransparency = 1
-	inventoryList.BorderSizePixel = 0
-	inventoryList.ScrollBarThickness = 5
-	inventoryList.CanvasSize = UDim2.fromScale(0, 0)
-	inventoryList.Parent = panel
-	local inventoryLayout = Instance.new("UIListLayout")
-	inventoryLayout.Padding = UDim.new(0, 3)
-	inventoryLayout.Parent = inventoryList
 
 	local state: any = nil
 	local compact = false
@@ -218,40 +189,6 @@ function EconomyController.start()
 		status.Text = if state.DataReady then `Coins {state.Coins}  |  Slots {state.Capacity}/{state.MaxCapacity}  |  Machines {state.InventoryCount or 0}/{state.MaxInventoryMachines or 200}` else (state.DataError or "Factory data is loading")
 		updateLuckStatus()
 		capacity.Text = if state.CapacityCost then `Buy capacity · {state.CapacityCost} Coins` else "Capacity MAX"
-		clearDynamicChildren(inventoryList)
-		local count = 0
-		local rollPool = MachineDefinitions.getRollPool()
-		for machineId, quantity in pairs(state.Inventory or {}) do
-			if quantity > 0 then
-				count += 1
-				local definition = MachineDefinitions.get(machineId)
-				local odds = if definition and definition.Rollable then EconomyRules.getMachineOddsLabel(machineId, rollPool) else nil
-				local oddsSuffix = if odds then ` [{odds}]` else ""
-				local machineName = definition and definition.DisplayName or machineId
-				local button = createButton(inventoryList, `Sell_{machineId}`, `Recycle {machineName}{oddsSuffix} ×{quantity}`)
-				button.Size = UDim2.new(1, -6, 0, if compact then 28 else 32)
-				button.TextXAlignment = Enum.TextXAlignment.Left
-				button.Activated:Connect(function()
-					local response = invoke(sellMachine, machineId, 1)
-					if response and response.Success then
-						setStatus(`Recycled one {definition and definition.DisplayName or machineId}.`, true)
-						refresh(response)
-					end
-				end)
-			end
-		end
-		if count == 0 then
-			local empty = Instance.new("TextLabel")
-			empty.BackgroundTransparency = 1
-			empty.Text = "Inventory is empty. Roll a machine to get another choice."
-			empty.TextColor3 = Color3.fromRGB(190, 180, 170)
-			empty.Font = Enum.Font.Gotham
-			empty.TextSize = 11
-			empty.TextWrapped = true
-			empty.Size = UDim2.new(1, -6, 0, 28)
-			empty.Parent = inventoryList
-		end
-		inventoryList.CanvasSize = UDim2.fromOffset(0, inventoryLayout.AbsoluteContentSize.Y)
 	end
 
 	roll.Activated:Connect(function()
@@ -269,12 +206,8 @@ function EconomyController.start()
 			local odds = if definition and definition.Rollable then EconomyRules.getMachineOddsLabel(definition.Id, rollPool) else nil
 			local machineName = definition and definition.DisplayName or response.LastRoll or "Machine"
 			result.Text = if odds then string.format("Rolled: %s · %s", machineName, odds) else string.format("Rolled: %s", machineName)
-			setStatus("Machine added to inventory.", true)
 			refresh(response)
 			EffectsController.play("MachineRolled", { MachineId = response.LastRoll, Rarity = response.LastRarity, LuckMultiplier = luckMultiplier })
-			setStatus("Machine added to inventory.", true)
-			refresh(response)
-			EffectsController.play("MachineRolled", { MachineId = response.LastRoll, Rarity = response.LastRarity })
 		else
 			syncCooldown(response)
 			setStatus(response and response.Reason or "Roll unavailable", false)
@@ -303,8 +236,8 @@ function EconomyController.start()
 			panelWidth = math.floor(math.clamp(viewportWidth * widthRatio, 232, 272))
 			panelWidth = math.min(panelWidth, math.max(184, viewportWidth - 16))
 		end
-		panel.Size = if compact then UDim2.fromOffset(panelWidth, 220) else UDim2.fromOffset(panelWidth, 360)
-		panel.Position = if compactLandscape then UDim2.fromOffset(8, 8) elseif compact then UDim2.fromOffset(8, 8) else UDim2.new(1, -316, 0, 16)
+		panel.Size = if compact then UDim2.fromOffset(panelWidth, 152) else UDim2.fromOffset(panelWidth, 180)
+		panel.Position = if compactLandscape or compact then UDim2.new(1, -panelWidth - 8, 0, 8) else UDim2.new(1, -316, 0, 16)
 		title.Position = UDim2.fromOffset(8, 8)
 		title.Size = UDim2.new(1, -16, 0, if compact then 24 else 26)
 		status.Position = UDim2.fromOffset(8, if compact then 34 else 36)
@@ -318,10 +251,6 @@ function EconomyController.start()
 		rollDock.Size = UDim2.fromOffset(if compact then math.min(268, viewportWidth - 24) else 320, 72)
 		roll.Position = UDim2.fromOffset(8, 8)
 		roll.Size = UDim2.new(1, -16, 1, -16)
-		inventoryTitle.Position = UDim2.fromOffset(8, if compact then 146 else 174)
-		inventoryTitle.Size = UDim2.new(1, -16, 0, 18)
-		inventoryList.Position = UDim2.fromOffset(8, if compact then 166 else 196)
-		inventoryList.Size = UDim2.new(1, -16, 0, if compact then 48 else 152)
 		render()
 	end
 

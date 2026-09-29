@@ -60,8 +60,27 @@ function BoosterRules.validate(): (boolean, string?)
 		return false, "Booster spawn limits must be positive"
 	end
 	local bounds = BoosterConfig.SpawnBounds
-	if type(bounds) ~= "table" or bounds.MinX >= bounds.MaxX or bounds.MinZ >= bounds.MaxZ or bounds.Height < 0 then
+	if type(bounds) ~= "table"
+		or type(bounds.MinX) ~= "number" or type(bounds.MaxX) ~= "number" or bounds.MinX >= bounds.MaxX
+		or type(bounds.MinZ) ~= "number" or type(bounds.MaxZ) ~= "number" or bounds.MinZ >= bounds.MaxZ then
 		return false, "Booster spawn bounds are invalid"
+	end
+	local raycast = BoosterConfig.LandRaycast
+	if type(raycast) ~= "table"
+		or type(raycast.StartHeight) ~= "number" or raycast.StartHeight <= 0
+		or type(raycast.Distance) ~= "number" or raycast.Distance <= raycast.StartHeight
+		or type(raycast.PositionAttempts) ~= "number" or raycast.PositionAttempts % 1 ~= 0 or raycast.PositionAttempts < 1 or raycast.PositionAttempts > 32
+		or type(raycast.MinimumGroundNormalY) ~= "number" or raycast.MinimumGroundNormalY < 0 or raycast.MinimumGroundNormalY > 1 then
+		return false, "Booster land raycast settings are invalid"
+	end
+	local fall = BoosterConfig.Fall
+	if type(fall) ~= "table"
+		or type(fall.DropHeight) ~= "number" or fall.DropHeight <= 0
+		or type(fall.DurationSeconds) ~= "number" or fall.DurationSeconds <= 0 or fall.DurationSeconds > 10
+		or type(fall.StartingSize) ~= "number" or fall.StartingSize <= 0
+		or type(fall.LandedSize) ~= "number" or fall.LandedSize < fall.StartingSize or fall.LandedSize > 10
+		or type(fall.LandingHeight) ~= "number" or fall.LandingHeight < fall.LandedSize / 2 then
+		return false, "Booster fall settings are invalid"
 	end
 	local seenIds: { [string]: boolean } = {}
 	for _, definition in ipairs(BoosterConfig.Definitions) do

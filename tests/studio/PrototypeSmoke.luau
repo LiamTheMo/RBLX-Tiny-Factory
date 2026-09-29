@@ -37,6 +37,10 @@ grantFunction.OnServerInvoke = function(player, grantKind)
 	if grantKind == "Luck" then return EconomyService.grantLuckBoost(player, 2, 30) end
 	local factory = FactoryService.getState(player)
 	assert(factory, "factory missing during test grant")
+	if grantKind == "SellerMachine" then
+		factory.inventory.Seller = (factory.inventory.Seller or 0) + 1
+		return true
+	end
 	return factory.simulation:grantCoins(30)
 end
 
@@ -46,7 +50,8 @@ findDropFunction.OnServerInvoke = function(player)
 	local deadline = os.clock() + 15
 	repeat
 		for _, candidate in ipairs(folder:GetChildren()) do
-			if candidate:IsA("BasePart") and candidate:GetAttribute("SourcePlotUserId") == player.UserId then
+			if candidate:IsA("BasePart") and candidate:GetAttribute("SourcePlotUserId") == player.UserId
+				and candidate:GetAttribute("Landed") == true then
 				candidate.CanTouch = false
 				testDrops[player] = candidate
 				lootCountBefore[player] = player:GetAttribute("Analytics_LootCollected") or 0
@@ -59,7 +64,8 @@ findDropFunction.OnServerInvoke = function(player)
 end
 
 armDropFunction.OnServerInvoke = function(player, candidate)
-	if candidate ~= testDrops[player] or not candidate or candidate.Parent ~= workspace:FindFirstChild("TinyFactoryBoosters") then return false end
+	if candidate ~= testDrops[player] or not candidate or candidate.Parent ~= workspace:FindFirstChild("TinyFactoryBoosters")
+		or candidate:GetAttribute("Landed") ~= true then return false end
 	candidate.CanTouch = true
 	return true
 end
@@ -74,13 +80,25 @@ resultEvent.OnServerEvent:Connect(function(player, success, message)
 	local snapshot = factory.simulation:getSnapshot()
 	assert(snapshot.ProducedItems > 0 and snapshot.SoldItems > 0 and snapshot.Coins > 0, "factory did not produce and sell")
 	local factoryLayout = require(game.ReplicatedStorage.Shared.FactoryLayout)
-	for slotIndex = 1, factoryLayout.EditableSlotCount do
+	for slotIndex = 1, factoryLayout.SlotCount do
 		local belt = factory.plot:FindFirstChild("Conveyor_" .. slotIndex)
-		assert(belt and belt:FindFirstChild("FactorySlotClick"), "editable conveyor slot is not clickable")
+		local clickDetector = belt and belt:FindFirstChild("FactorySlotClick")
+		assert(clickDetector and clickDetector:IsA("ClickDetector") and clickDetector.MaxActivationDistance > 0, "factory area is not clickable")
 	end
-	assert(not factory.plot:FindFirstChild("Conveyor_" .. factoryLayout.SellerSlotIndex):FindFirstChild("FactorySlotClick"), "fixed seller slot must not be editable")
+	local machineFolder = factory.plot:FindFirstChild("Machines")
+	local hasDropper = false
+	if machineFolder then
+		for _, machineModel in ipairs(machineFolder:GetChildren()) do
+			if machineModel:FindFirstChild("DropperHousing", true) then
+				hasDropper = true
+				break
+			end
+		end
+	end
+	assert(hasDropper, "temporary dropper proof-of-concept model is missing")
 	local loot = testDrops[player]
 	assert(loot and loot:GetAttribute("Claimed") == true and loot.Parent == nil, "running over the world booster did not claim it")
+	assert(loot:GetAttribute("Landed") == true and loot.Position.Y >= 0.5 and loot.Transparency == 0, "booster should fade in and land above the baseplate")
 	assert(not LootService.claim(player, loot), "world booster claimed twice")
 	assert((player:GetAttribute("Analytics_LootCollected") or 0) == lootCountBefore[player] + 1, "booster pickup analytics missing")
 	print("Prototype gameplay smoke test passed")
@@ -111,6 +129,7 @@ local success, message = pcall(function()
 	local recycle = factory:WaitForChild("SellMachine")
 	local buyCapacity = factory:WaitForChild("BuyCapacity")
 	local state = factory:WaitForChild("GetEconomyState")
+	local getFactoryState = factory:WaitForChild("GetFactoryState")
 	local definition = require(ReplicatedStorage.Shared.MachineDefinitions)
 	local economyRules = require(ReplicatedStorage.Shared.EconomyRules)
 	local gui = player.PlayerGui:WaitForChild("EconomyHud")
@@ -134,15 +153,25 @@ local success, message = pcall(function()
 	assert(grantFunction:InvokeServer("Luck"), "timed Luck booster grant failed")
 	local luckyState = state:InvokeServer()
 	assert(luckyState.LuckMultiplier == 2 and luckyState.LuckExpiresAt > workspace:GetServerTimeNow(), "Luck state was not synchronized")
-	local buildInventory = player.PlayerGui:WaitForChild("BuildHud"):WaitForChild("BuildPanel"):WaitForChild("InventoryList")
-	local inventoryRow = buildInventory:WaitForChild("Machine_" .. first.LastRoll, 2) :: TextButton?
-	assert(inventoryRow and inventoryRow:IsA("TextButton"), "rolled machine missing from build inventory")
-	assert(firstOdds and inventoryRow.Text:find(firstOdds, 1, true), "inventory row omitted machine odds")
+	local inventoryController = require(player.PlayerScripts.Client.Controllers.InventoryController)
+	local inventoryHud = player.PlayerGui:WaitForChild("FactoryInventoryHud")
+	assert(inventoryHud:FindFirstChild("InventoryButton"), "persistent inventory button is missing")
+	inventoryController.openInventory()
+	task.wait(0.15)
+	local inventoryList = inventoryHud.MachinePanel:WaitForChild("MachineList")
+	local inventoryRow = inventoryList:WaitForChild("Owned_" .. first.LastRoll, 2)
+	assert(inventoryRow and inventoryRow:IsA("Frame"), "rolled machine missing from owned inventory")
+	local machineDetails = inventoryRow:FindFirstChild("MachineDetails") :: TextLabel?
+	assert(firstOdds and machineDetails and machineDetails.Text:find(firstOdds, 1, true), "inventory row omitted machine odds")
 	local blocked = roll:InvokeServer()
 	assert(not blocked.Success and blocked.Reason == "Roll cooldown active", "server cooldown failed")
 	local slot = if machine.Category == "Producer" then 1 else 2
 	local placed = place:InvokeServer(first.LastRoll, slot, true)
 	assert(placed.Success, "rolled machine could not be placed")
+	inventoryController.openPlacement(slot)
+	task.wait(0.1)
+	assert(inventoryHud.MachinePanel.PanelTitle.Text == "Place in Area " .. slot, "click-to-place inventory did not open for the selected area")
+	inventoryController.close()
 	task.wait(3.1)
 	local second = roll:InvokeServer()
 	assert(second.Success and second.RollCount == first.RollCount + 1, "cooldown did not expire")
@@ -167,20 +196,35 @@ local success, message = pcall(function()
 	assert(not overlay.RevealCard.Text:find(secondRarity, 1, true), "roll result should not repeat rarity by the heading")
 	assert(overlay.RevealCard.TextWrapped == false, "roll reveal text should stay on one line")
 	local textLimit = overlay.RevealCard:FindFirstChildOfClass("UITextSizeConstraint")
-	assert(textLimit and textLimit.MinTextSize >= 12 and textLimit.MaxTextSize >= 16, "roll reveal text should stay readable on one line")
+	assert(textLimit and textLimit.MinTextSize >= 14 and textLimit.MaxTextSize >= 20, "roll reveal text should stay readable on one line")
 	effects.play("UltraRareRollCutscene", { MachineName = "Test Machine", Rarity = "Legendary", Odds = "1/10001" })
 	task.wait(0.1)
 	assert(overlay.Visible and overlay.Heading.Text == "ULTRA RARE MACHINE!", "ultra-rare cutscene test event did not open")
 	assert(overlay.RevealCard.Text:find("1/10001", 1, true), "ultra-rare cutscene omitted test odds")
 	task.wait(0.15)
+	local toast = player.PlayerGui.FactoryEffects:FindFirstChild("EventToast") :: TextLabel?
+	assert(not toast or not toast.Text:find("Added to inventory", 1, true), "roll completion should not show an added-to-inventory toast")
 	local recycled = recycle:InvokeServer(second.LastRoll, 1)
 	assert(recycled.Success, "free-roll recycling failed")
 	assert(grantFunction:InvokeServer(), "test Coin grant failed")
 	task.wait(0.15)
 	local upgraded = buyCapacity:InvokeServer()
 	assert(upgraded.Success and upgraded.Capacity == 2, "capacity purchase failed")
+	assert(grantFunction:InvokeServer("SellerMachine"), "test Seller grant failed")
+	task.wait(0.15)
+	local placedSeller = place:InvokeServer("Seller", 3, false)
+	assert(placedSeller.Success, "rolled Seller could not replace the current route end")
+	task.wait(0.15)
+	local movedSeller = factory:WaitForChild("MoveMachine"):InvokeServer(3, 4)
+	assert(movedSeller.Success, "Seller could not move to another physical route end")
+	local movedState = getFactoryState:InvokeServer()
+	assert(movedState.Success and movedState.Layout[4] == "Seller" and movedState.Layout[5] == "", "Seller should not be fixed in area five")
+	inventoryController.openInventory()
+	task.wait(0.1)
+	local sellerRow = inventoryHud.MachinePanel.MachineList:FindFirstChild("Owned_Seller")
+	assert(sellerRow and sellerRow:FindFirstChild("MachineDetails"), "owned inventory omitted the Seller")
 	local targetDrop = findDropFunction:InvokeServer()
-	assert(targetDrop and targetDrop:IsA("BasePart") and not targetDrop.CanTouch, "test booster was not held for touch pickup")
+	assert(targetDrop and targetDrop:IsA("BasePart") and targetDrop:GetAttribute("Landed") == true and not targetDrop.CanTouch, "test booster was not held after landing")
 	assert(not targetDrop:FindFirstChildOfClass("ProximityPrompt"), "world booster should not need an interaction prompt")
 	local character = player.Character or player.CharacterAdded:Wait()
 	local root = character:WaitForChild("HumanoidRootPart") :: BasePart

@@ -98,8 +98,8 @@ function EffectsController.start()
 	card.TextScaled = true
 	card.TextWrapped = false
 	local cardTextLimit = Instance.new("UITextSizeConstraint")
-	cardTextLimit.MinTextSize = 12
-	cardTextLimit.MaxTextSize = 18
+	cardTextLimit.MinTextSize = 14
+	cardTextLimit.MaxTextSize = 20
 	cardTextLimit.Parent = card
 	card.Parent = overlay
 	local sizeLimit = Instance.new("UISizeConstraint")
@@ -237,7 +237,6 @@ function EffectsController.start()
 			task.wait(1.2)
 			if token == sequence then
 				overlay.Visible = false
-				showToast("Added to inventory", getRarityColor(rarity))
 			end
 		end)
 	end)
