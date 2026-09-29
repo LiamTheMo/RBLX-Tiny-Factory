@@ -42,8 +42,8 @@ The major branches are permanent checkpoints. Only `main` and branches named
 `vX.XX` are major branches.
 
 1. Audit the repository, branch, requirements, and existing validation state.
-2. Start from the intended major branch. For new work, use the latest completed
-   checkpoint, currently `v0.06`; `v0.01` remains the historical foundation.
+2. Start from the intended major branch. For current v1 work, use `v1.00`;
+   earlier version branches remain historical checkpoints.
 3. Create a descriptive temporary/minor branch for every change. Never develop
    directly on `main` or a `vX.XX` branch.
 4. Implement one coherent change set on the temporary branch.
@@ -117,7 +117,7 @@ services, tests, or deployment assumptions when implementing Tiny Factory.
 - server-owned producer → path → processor → seller simulation;
 - compact logical item state and a strict active-item cap;
 - Coins as the only v1 currency;
-- machine placement, movement, removal, inventory, rolling, resale, and a few
+- machine placement, movement, removal, inventory, free rolling, recycling, and a few
   capacity upgrades;
 - approximately twelve machines only if they create distinct decisions;
 - schema-versioned persistence and basic analytics;
@@ -203,7 +203,8 @@ machines must remain strategically useful.
 
 ## Economy and security rules
 
-Coins fund rolls and limited capacity upgrades. All economy mutations must be
+Rolls are free with a server-owned cooldown; Coins fund limited capacity upgrades.
+All economy mutations must be
 transactional, bounded, server-side, and observable. Inventory operations must
 conserve items: a failed move, sell, or placement must not destroy or duplicate
 ownership. Use request IDs or equivalent idempotency protection where retries

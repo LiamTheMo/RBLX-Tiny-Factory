@@ -2,9 +2,9 @@ name: Tiny Factory validation and deployment
 
 on:
   pull_request:
-    branches: [main, v0.01, v0.02, v0.03, v0.04, v0.05, v0.06, v1.00]
+    branches: [main, 'v*']
   push:
-    branches: [main]
+    branches: [main, 'v*']
   workflow_dispatch:
     inputs:
       publish:
@@ -78,52 +78,13 @@ jobs:
           set -euo pipefail
           rojo build default.project.json --output /tmp/TinyFactoryValidation.rbxlx
           test -s /tmp/TinyFactoryValidation.rbxlx
-          grep -q "AssetCatalog" /tmp/TinyFactoryValidation.rbxlx
-          grep -q "AssetShowcaseService" /tmp/TinyFactoryValidation.rbxlx
-
-  import_3d_assets:
-    name: Import reusable 3D models into Roblox
-    needs: validate
-    if: >-
-      github.ref == 'refs/heads/main' &&
-      (github.event_name == 'push' ||
-       (github.event_name == 'workflow_dispatch' && inputs.publish == true))
-    runs-on: ubuntu-latest
-    timeout-minutes: 240
-    steps:
-      - name: Check out main
-        id: checkout
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-
-      - name: Upload each GLB as a reusable Roblox Model
-        if: steps.checkout.outcome == 'success'
-        env:
-          ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
-          ROBLOX_UNIVERSE_ID: ${{ secrets.ROBLOX_UNIVERSE_ID }}
-        shell: bash
-        run: python3 scripts/import_3d_assets.py
-
-      - name: Persist successful Roblox asset IDs to main
-        if: always() && steps.checkout.outcome == 'success'
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/assets/3d-model-assets.json src/assets/Models/3D/AssetCatalog.luau
-          if git diff --cached --quiet; then
-            echo "No new Roblox asset ID checkpoints"
-          else
-            git commit -m "chore: record Roblox 3D asset IDs"
-            git push origin HEAD:main
-          fi
+          grep -q "PrototypeBaseplate" /tmp/TinyFactoryValidation.rbxlx
+          grep -q "PrototypeSpawn" /tmp/TinyFactoryValidation.rbxlx
+          grep -q "LootService" /tmp/TinyFactoryValidation.rbxlx
 
   publish:
     name: Publish validated main build
-    needs: [validate, import_3d_assets]
+    needs: validate
     if: >-
       github.ref == 'refs/heads/main' &&
       ((github.event_name == 'workflow_dispatch' && inputs.publish == true) ||
@@ -135,10 +96,6 @@ jobs:
         with:
           ref: main
           persist-credentials: false
-
-      - name: Verify every GLB has an imported Roblox Model
-        shell: bash
-        run: python3 scripts/import_3d_assets.py --validate-only --require-imported
 
       - name: Set up Rokit toolchain
         uses: CompeyDev/setup-rokit@v0.1.2

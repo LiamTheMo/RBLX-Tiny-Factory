@@ -4,61 +4,61 @@
 Implement the acquisition/economy loop that turns production into new factory choices.
 
 ## Player-Facing Result
-- Coins buy a machine roll.
+- Machine rolls are free with a server-owned cooldown.
 - Rolled machines enter inventory.
-- Players can place, store, or sell machines.
-- Capacity upgrades compete with rolls for Coins.
+- Players can place, store, or recycle machines.
+- Coins earned from production and pickups buy capacity upgrades.
 
 ## Systems
 - RollService
 - InventoryService
 - EconomyService
 - Rarity tables
-- Resale
+- Recycling
 - Capacity upgrades
 
 ## Technical Work
 - Server-only weighted RNG.
-- Configurable roll costs, weights, refunds, and capacity prices.
-- Atomic purchase/grant flow.
+- Configurable cooldown, inventory limit, weights, and capacity prices.
+- Atomic server-owned roll/grant flow.
 - Inventory quantities by machine ID where instances are equivalent.
 - Request rate limits/idempotency protection as needed.
 
 ## Gameplay Work
 - Start with Common–Legendary rarity framework.
 - Enable duplicate machines.
-- Add partial resale value.
+- Recycle unwanted machines without a Coin payout.
 - Add 2–3 meaningful capacity purchases beyond starting capacity.
 
 ## UI/UX Work
-- Roll button and cost
+- Bottom-center roll button and cooldown
 - Roll result presentation
 - Compact inventory
 - Rarity/readable effect info
-- Sell confirmation
+- Recycle confirmation
 - Capacity upgrade display
 
 ## Art / Audio / Asset Requirements
 - Rarity frames/icons
 - Simple roll reveal
-- Coin feedback
+- Cooldown and Coin feedback
 - Inventory machine thumbnails/placeholders
 
 ## Dependencies
 Placement system and machine definitions from Phases 1–2.
 
 ## Analytics / Instrumentation
-- Roll purchased
+- Free roll granted
 - Rarity result
 - Machine granted
-- Machine sold
-- Coins spent/earned
+- Machine recycled
+- Coins earned/spent on capacity
 - Capacity purchased
 - Time to first roll
 
 ## Security / Exploit Considerations
 - Never accept client-selected roll result.
-- Validate cost before grant.
+- Validate cooldown and inventory space before grant.
 - Prevent negative inventory.
 - Prevent replayed sell/upgrade requests.
 
@@ -76,8 +76,8 @@ Placement system and machine definitions from Phases 1–2.
 ## Manual Validation
 - Roll pacing
 - Inventory comprehension
-- Resale frustration
-- Capacity-vs-roll choice
+- Cooldown and recycling frustration
+- Capacity purchase clarity
 - mobile inventory usability
 
 ## Scope Classification
@@ -85,7 +85,7 @@ Placement system and machine definitions from Phases 1–2.
 - Coins
 - rolls
 - inventory
-- resale
+- recycling
 - capacity
 ### Valuable Later
 - choice-of-three
@@ -105,4 +105,4 @@ Placement system and machine definitions from Phases 1–2.
 - player marketplace
 
 ## Completion Definition
-Phase is complete when production Coins can safely and understandably cycle through rolls, inventory decisions, placement, resale, and limited expansion with no trivial exploit path.
+Phase is complete when free rolls, inventory decisions, placement, recycling, and Coin-funded expansion work with no trivial exploit path.

@@ -11,6 +11,7 @@ local FactorySimulation = require(Shared:WaitForChild("FactorySimulation"))
 local MachineDefinitions = require(Shared:WaitForChild("MachineDefinitions"))
 local PlacementRules = require(Shared:WaitForChild("PlacementRules"))
 local AnalyticsService = require(script.Parent.AnalyticsService)
+local EffectService = require(script.Parent.EffectService)
 
 local FactoryService = {}
 local factories = {}
@@ -66,7 +67,10 @@ local function createPlaceholderPlot(player: Player): (Folder, Vector3)
 
 	createPart(plot, "PlotBase", Vector3.new(30, 0.5, 8), origin + Vector3.new(12, -0.25, 0), Color3.fromRGB(73, 55, 42))
 	for slotIndex = 0, FactoryLayout.SlotCount - 1 do
-		createPart(plot, `Path_{slotIndex + 1}`, Vector3.new(5.5, 0.15, 2), origin + Vector3.new(slotIndex * 6, 0.1, 0), Color3.fromRGB(104, 104, 104))
+		local belt = createPart(plot, `Conveyor_{slotIndex + 1}`, Vector3.new(5.5, 0.15, 2), origin + Vector3.new(slotIndex * 6, 0.1, 0), Color3.fromRGB(66, 75, 84))
+		belt.Material = Enum.Material.Metal
+		local stripe = createPart(plot, `ConveyorGuide_{slotIndex + 1}`, Vector3.new(4.2, 0.02, 0.16), origin + Vector3.new(slotIndex * 6, 0.2, 0), Color3.fromRGB(90, 210, 230))
+		stripe.Material = Enum.Material.Neon
 	end
 	return plot, origin
 end
@@ -208,6 +212,10 @@ local function isRateLimited(player: Player): boolean
 	return false
 end
 
+local function dataIsReady(player: Player): boolean
+	return player:GetAttribute("FactoryDataReady") == true
+end
+
 local function commitLayout(factory: any, layout: FactoryLayout.Layout): (boolean, string?)
 	local valid, errorMessage = PlacementRules.validateLayout(layout, factory.capacity)
 	if not valid then
@@ -229,6 +237,9 @@ local function placeMachine(player: Player, machineId: any, slotIndex: any, repl
 	local factory = factories[player]
 	if not factory then
 		return { Success = false, Reason = "Factory is not ready" }
+	end
+	if not dataIsReady(player) then
+		return buildResponse(factory, false, "Factory data is loading")
 	end
 	if isRateLimited(player) then
 		return buildResponse(factory, false, "Too many requests")
@@ -263,6 +274,7 @@ local function placeMachine(player: Player, machineId: any, slotIndex: any, repl
 		return buildResponse(factory, false, commitError)
 	end
 	AnalyticsService.record(player, "MachinePlaced")
+	EffectService.fire(player, "InventoryChanged")
 	return buildResponse(factory, true)
 end
 
@@ -270,6 +282,9 @@ local function removeMachine(player: Player, slotIndex: any)
 	local factory = factories[player]
 	if not factory then
 		return { Success = false, Reason = "Factory is not ready" }
+	end
+	if not dataIsReady(player) then
+		return buildResponse(factory, false, "Factory data is loading")
 	end
 	if isRateLimited(player) then
 		return buildResponse(factory, false, "Too many requests")
@@ -295,6 +310,7 @@ local function removeMachine(player: Player, slotIndex: any)
 		return buildResponse(factory, false, commitError)
 	end
 	AnalyticsService.record(player, "MachineRemoved")
+	EffectService.fire(player, "InventoryChanged")
 	return buildResponse(factory, true)
 end
 
@@ -302,6 +318,9 @@ local function moveMachine(player: Player, sourceSlotIndex: any, destinationSlot
 	local factory = factories[player]
 	if not factory then
 		return { Success = false, Reason = "Factory is not ready" }
+	end
+	if not dataIsReady(player) then
+		return buildResponse(factory, false, "Factory data is loading")
 	end
 	if isRateLimited(player) then
 		return buildResponse(factory, false, "Too many requests")
@@ -335,6 +354,7 @@ local function moveMachine(player: Player, sourceSlotIndex: any, destinationSlot
 		return buildResponse(factory, false, commitError)
 	end
 	AnalyticsService.record(player, "MachineMoved")
+	EffectService.fire(player, "InventoryChanged")
 	return buildResponse(factory, true)
 end
 
@@ -343,6 +363,9 @@ local function createFactory(player: Player)
 		return
 	end
 	player:SetAttribute("FactoryBuildVersion", FactoryConfig.BuildVersion)
+	if player:GetAttribute("FactoryDataReady") == nil then
+		player:SetAttribute("FactoryDataReady", false)
+	end
 	local simulation = FactorySimulation.new({ Route = FactoryLayout.toRoute(FactoryLayout.Default) })
 	local plot, origin = createPlaceholderPlot(player)
 	local factory = {
@@ -353,6 +376,8 @@ local function createFactory(player: Player)
 		capacity = 1,
 		inventory = {},
 		visualItems = {},
+		announcedSpawn = false,
+		announcedSale = false,
 	}
 	factories[player] = factory
 	refreshMachineVisuals(factory)
@@ -501,7 +526,20 @@ function FactoryService.start()
 	RunService.Heartbeat:Connect(function(deltaTime)
 		attributeUpdateAccumulator += deltaTime
 		for player, factory in pairs(factories) do
+			if not dataIsReady(player) then
+				continue
+			end
+			local before = factory.simulation:getSnapshot()
 			factory.simulation:step(deltaTime)
+			local after = factory.simulation:getSnapshot()
+			if not factory.announcedSpawn and after.ProducedItems > before.ProducedItems then
+				factory.announcedSpawn = true
+				EffectService.fire(player, "FirstItemSpawned")
+			end
+			if not factory.announcedSale and after.SoldItems > before.SoldItems then
+				factory.announcedSale = true
+				EffectService.fire(player, "FirstItemSold", { Coins = after.Coins })
+			end
 			updateVisualItems(factory)
 			if attributeUpdateAccumulator >= 0.25 then
 				updateDebugAttributes(player, factory)

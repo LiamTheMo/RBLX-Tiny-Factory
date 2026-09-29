@@ -16,7 +16,7 @@ The factory—not pets, rebirth pads, currencies, or giant menus—is the star.
 2. Process them through machines.
 3. Sell them.
 4. Earn Coins.
-5. Spend Coins to roll for another machine.
+5. Roll for another machine for free after the server cooldown.
 6. Decide whether to place, replace, store, or sell the result.
 7. Rebuild the factory.
 8. Increase production.
