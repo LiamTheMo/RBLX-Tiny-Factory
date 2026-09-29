@@ -11,9 +11,10 @@ local SaveSchema = require(Shared:WaitForChild("SaveSchema"))
 local FactoryService = require(script.Parent.FactoryService)
 local EconomyService = require(script.Parent.EconomyService)
 local AnalyticsService = require(script.Parent.AnalyticsService)
+local EffectService = require(script.Parent.EffectService)
 
 local DataService = {}
-local store = DataStoreService:GetDataStore("TinyFactory_PlayerData_v1")
+local store: any = nil
 local sessionIds: { [Player]: string } = {}
 local loadedPlayers: { [Player]: boolean } = {}
 local started = false
@@ -43,17 +44,35 @@ local function unpackRecord(value: any): ({ [string]: any }, any, number?)
 	return data, owner, if type(lastSeen) == "number" then lastSeen else nil
 end
 
-local function setLoadStatus(player: Player, loaded: boolean, locked: boolean, reason: string?)
+local function setLoadStatus(player: Player, loaded: boolean, locked: boolean, reason: string?, allowUnsavedPrototype: boolean?)
 	player:SetAttribute("FactoryDataLoaded", loaded)
 	player:SetAttribute("FactoryDataLocked", locked)
+	player:SetAttribute("FactoryDataReady", loaded or allowUnsavedPrototype == true)
 	if reason then
 		player:SetAttribute("FactoryDataError", reason)
 	else
 		player:SetAttribute("FactoryDataError", nil)
 	end
+	EffectService.fire(player, "InventoryChanged")
 end
 
 local function loadPlayer(player: Player)
+	while player.Parent == Players and not FactoryService.getState(player) do
+		task.wait()
+	end
+	if player.Parent ~= Players then
+		return
+	end
+	if not store then
+		-- Only a local, unpublished Rojo build may play without cloud saving.
+		-- A published place with an unavailable store must not accept changes.
+		if game.PlaceId == 0 then
+			setLoadStatus(player, false, false, "Saving requires a published place", true)
+		else
+			setLoadStatus(player, false, false, "Data store unavailable")
+		end
+		return
+	end
 	if sessionIds[player] then
 		return
 	end
@@ -185,6 +204,14 @@ function DataService.start()
 		return
 	end
 	started = true
+	local opened, result = pcall(function()
+		return DataStoreService:GetDataStore("TinyFactory_PlayerData_v1")
+	end)
+	if opened then
+		store = result
+	else
+		warn(`Tiny Factory saving is unavailable in this place: {result}`)
+	end
 	Players.PlayerAdded:Connect(loadPlayer)
 	Players.PlayerRemoving:Connect(function(player)
 		savePlayer(player, true)

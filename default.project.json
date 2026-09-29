@@ -3,6 +3,35 @@
   "tree": {
     "$className": "DataModel",
 
+    "Workspace": {
+      "$className": "Workspace",
+      "$path": "src/workspace",
+      "PrototypeBaseplate": {
+        "$className": "Part",
+        "$properties": {
+          "Anchored": true,
+          "Size": [2048, 4, 280],
+          "Position": [1000, -2, 0],
+          "Material": "Grass",
+          "Color": [0.38, 0.58, 0.31],
+          "TopSurface": "Smooth",
+          "BottomSurface": "Smooth"
+        }
+      },
+      "PrototypeSpawn": {
+        "$className": "SpawnLocation",
+        "$properties": {
+          "Anchored": true,
+          "Neutral": true,
+          "Duration": 0,
+          "Size": [6, 1, 6],
+          "Position": [15, 0.5, 14],
+          "Material": "WoodPlanks",
+          "Color": [0.59, 0.41, 0.25]
+        }
+      }
+    },
+
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
       "Shared": {

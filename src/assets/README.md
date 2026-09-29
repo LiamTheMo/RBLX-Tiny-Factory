@@ -20,7 +20,6 @@ The 72 environment GLBs are single-mesh, single-primitive, single-material
 assets. Their embedded JPEG textures are limited to 1024×1024 while preserving
 the original colors and geometry. The 3D folder also contains
 `AssetCatalog.luau`, which Rojo includes under `ReplicatedStorage.Assets`; the
-main-only import workflow uploads each GLB as its own Roblox Model, records its
-asset ID in the catalog, and the server showcase displays both 6×6 sheets on a
-large grass baseplate. The source GLBs are kept in this folder for repeatable
-imports.
+optional import helper can upload each GLB as its own Roblox Model and record its
+asset ID in the catalog. The asset showcase is disabled for the temporary
+baseplate prototype. The source GLBs remain here for later map work.

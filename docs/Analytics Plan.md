@@ -79,9 +79,9 @@ Weak signals:
 Track aggregated:
 
 - Coins earned
-- Coins spent on rolls
+- free rolls accepted and cooldown rejections
 - Coins spent on expansion
-- Coins returned from machine resale
+- machines recycled from inventory
 - production rate bands
 - roll rarity distribution
 - machine ownership distribution
