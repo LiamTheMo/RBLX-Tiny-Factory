@@ -1,10 +1,11 @@
 # Phase 2 — Building & Placement
 
 ## Objective
-Let players safely place, move, rotate, and remove machines on a deliberately constrained v1 layout.
+Let players safely place, move, and remove machines on a deliberately constrained v1 layout. Direction stays fixed left-to-right.
 
 ## Player-Facing Result
-- Player enters build mode, selects a machine placeholder, previews placement, commits it, moves it, and removes it.
+- The temporary conveyor has four clickable machine positions followed by a fixed seller slot.
+- Players can click a physical slot before choosing inventory, or select a machine first and click its destination; the HUD remains available as a fallback.
 - The production route updates immediately.
 
 ## Systems
@@ -16,7 +17,7 @@ Let players safely place, move, rotate, and remove machines on a deliberately co
 - Server factory layout state
 
 ## Technical Work
-- Define slot IDs and allowed machine categories.
+- Define slot IDs and allowed machine categories. Keep the first four positions editable and the fifth seller fixed; capacity still gates the middle positions.
 - Add authoritative placement requests.
 - Ensure move operations cannot duplicate machines.
 - Serialize layout into a compact structure suitable for later saving.
@@ -30,8 +31,8 @@ Let players safely place, move, rotate, and remove machines on a deliberately co
 - Build-mode toggle
 - Machine selection strip
 - Valid/invalid placement highlight
-- Rotate/cancel/remove controls
-- Touch-friendly buttons
+- Cancel/remove controls; conveyor orientation stays fixed left-to-right
+- Touch-friendly controls for mobile and click-to-place world slots.
 
 ## Art / Audio / Asset Requirements
 - Placeholder placement ghost

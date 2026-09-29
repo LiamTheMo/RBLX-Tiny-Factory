@@ -3,6 +3,8 @@
 local EconomyConfig = require("../src/shared/EconomyConfig")
 local EconomyRules = require("../src/shared/EconomyRules")
 local MachineDefinitions = require("../src/shared/MachineDefinitions")
+local BoosterConfig = require("../src/shared/BoosterConfig")
+local BoosterRules = require("../src/shared/BoosterRules")
 
 local function expect(condition: boolean, message: string)
 	if not condition then
@@ -26,6 +28,7 @@ local expectedRarityColors = {
 	Legendary = { 240, 168, 143 },
 }
 local previousMaxDenominator = 0
+local expectedLuckBias = { Common = 0, Uncommon = 0.25, Rare = 0.5, Epic = 0.75, Legendary = 1 }
 expect(#rarityBands > 0, "at least one rarity band must be configured")
 for index, band in ipairs(rarityBands) do
 	local rarityName = band.Name :: string
@@ -36,6 +39,9 @@ for index, band in ipairs(rarityBands) do
 	seenRarities[rarityName] = true
 	expect(maxDenominator > previousMaxDenominator, "rarity bands must follow increasing odds limits")
 	expect(type(color) == "table" and #color == 3, "each rarity band needs an RGB display color")
+	expect(type(band.LuckBias) == "number" and band.LuckBias >= 0 and band.LuckBias <= 1, "rarity luck bias must be bounded")
+	local expectedBias = expectedLuckBias[rarityName]
+	if expectedBias then expect(band.LuckBias == expectedBias, "configured rarity luck bias changed unexpectedly") end
 	for _, channel in ipairs(color) do
 		expect(type(channel) == "number" and channel % 1 == 0 and channel >= 0 and channel <= 255, "rarity display colors must use RGB channels from 0 to 255")
 	end
@@ -70,6 +76,36 @@ for _, definition in ipairs(rollPool) do
 	expect(odds ~= nil and string.sub(odds, 1, 2) == "1/", "every rollable machine must have an odds label")
 	expect(definition.Rarity == EconomyRules.getRarityFromOdds(EconomyConfig.MachineRollChanceTotal / chance), "each machine rarity must follow its weighted chance")
 end
+local baseTotalChance = EconomyRules.getRollPoolTotalChance(rollPool)
+expect(math.abs(baseTotalChance - EconomyConfig.MachineRollChanceTotal) < 0.000001, "base chance total should remain configured")
+local luckyPool = EconomyRules.getLuckAdjustedRollPool(rollPool, 2)
+expect(EconomyRules.getRollPoolTotalChance(luckyPool) > baseTotalChance, "Luck should raise higher-rarity weights")
+local rarestMachineId = nil
+local rarestBaseDenominator = 0
+for _, definition in ipairs(rollPool) do
+	local denominator = EconomyRules.getMachineOddsDenominator(definition.Id, rollPool) or 0
+	if denominator > rarestBaseDenominator then rarestMachineId = definition.Id; rarestBaseDenominator = denominator end
+end
+local luckyDenominator = EconomyRules.getMachineOddsDenominator(rarestMachineId, luckyPool)
+expect(luckyDenominator and luckyDenominator < rarestBaseDenominator, "Luck should improve the rarest configured odds")
+expect(EconomyRules.getMachineOddsDenominator(rarestMachineId, rollPool) == rarestBaseDenominator, "lucky weights must not mutate base definitions")
+expect(EconomyRules.getRollPoolTotalChance(EconomyRules.getLuckAdjustedRollPool(rollPool, 1)) == baseTotalChance, "inactive Luck should preserve base weights")
+
+local boostersValid, boostersError = BoosterRules.validate()
+expect(boostersValid, boostersError or "booster config should validate")
+local totalBoosterWeight = BoosterRules.getTotalSpawnWeight()
+expect(totalBoosterWeight >= 100, "starter booster weights should remain positive and extensible")
+expect(BoosterRules.pickBoosterId(0) == "Coin", "the first booster weight should resolve to Coins")
+expect(BoosterRules.pickBoosterId(69.99) == "Coin", "Coin booster weight boundary is incorrect")
+expect(BoosterRules.pickBoosterId(70) == "Luck", "Luck should start at its configured weight")
+expect(BoosterRules.pickBoosterId(99.99) == "Luck", "Luck booster range boundary is incorrect")
+expect(BoosterRules.pickBoosterId(totalBoosterWeight) == nil, "out-of-range booster rolls should fail")
+local coinBooster = assert(BoosterRules.get("Coin"))
+local luckBooster = assert(BoosterRules.get("Luck"))
+expect(coinBooster.Effect.Amount == 5, "Coin reward should remain config-driven")
+expect(luckBooster.Effect.DurationSeconds == 30, "Luck duration should remain config-driven")
+expect(BoosterConfig.MaxLuckDurationSeconds <= 120, "temporary Luck duration should remain capped")
+
 local goldenizer = assert(MachineDefinitions.get("Goldenizer"))
 expect(goldenizer.Rarity == "Uncommon", "a machine at the inclusive 1/500 boundary should be Uncommon")
 local definitionsValid, definitionsError = MachineDefinitions.validate()

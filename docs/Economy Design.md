@@ -41,7 +41,7 @@ Purpose:
 - keep inventory usable
 - avoid converting free rolls into unlimited Coins
 
-The conveyor seller and world Coin drops are the ways this prototype earns Coins.
+The conveyor seller and Coin booster drops are the ways this prototype earns Coins. Other world boosters grant temporary effects, not new currencies.
 
 ## 5. Factory Expansion
 
@@ -91,11 +91,13 @@ Every rollable machine has its own configured roll chance. The server selects fr
 
 Each upper denominator limit is inclusive: for example, 1/100 is Common and odds just rarer than 1/100 are Uncommon. Legendary is the final open-ended band; a future tier can be inserted by adding an ordered rarity-band entry before it.
 
-The ordered rarity bands, denominator limits, and reveal colors are defined once in shared economy configuration. Rollable machines keep distinct weighted chances alongside their definitions; both rarity and the displayed 1/x odds are derived from those weights. The current pastel reveal palette is Common `#D9D9DE`, Uncommon `#BFE8C5`, Rare `#B8D8F0`, Epic `#D7B8E8`, and Legendary `#F0A88F`. Keep these RGB values centralized in the ordered band entries.
+The ordered rarity bands, denominator limits, pastel reveal colors, and luck biases are defined once in shared economy configuration. Rollable machines keep distinct weighted chances alongside their definitions; rarity and displayed 1/x odds are derived from the active weighted pool. Without a booster, the configured base chance total remains 100%. A temporary Luck booster modestly increases weights in higher rarity bands using each band's `LuckBias`; Common stays unchanged, the overall pool is renormalized, and the server caps the multiplier and duration. Inventory odds continue to describe the base chances, while an active roll reveal uses boosted effective odds.
 
-Roll animation samples show machine name, derived rarity, and reciprocal odds together on one compact line. A configurable cosmetic cutscene plays when the final machine's odds denominator is greater than 10,000; the exact 1/10,000 boundary does not trigger it. The shared presentation event can be invoked in Studio tests to verify the cutscene before a live machine reaches that rarity.
+Roll animation samples show machine name and reciprocal odds on one readable line. Rarity is shown through the pastel reveal color and final heading (for example, `RARE MACHINE!`) instead of repeating it in that line. A configurable cosmetic cutscene plays when the final effective odds denominator is greater than 10,000; the exact 1/10,000 boundary does not trigger it. Studio tests invoke the shared presentation event to verify the cutscene without relying on a live ultra-rare result.
 
-The configured machine chances total 100%. The current values are starting balance data and should be retuned from playtests. Rarity may influence average expected power, but should not map directly to a fixed multiplier ladder.
+Random world boosters are defined in `BoosterConfig` and validated by pure `BoosterRules`. The starter set grants Coins or a temporary 2x Luck effect. Drops appear around factory plots, are public to all players, and activate on Humanoid touch; the server validates claims and applies rewards. Weights, colors, values, spawn bounds, and lifetimes are centralized so new booster types can be added as definitions without duplicating reward logic.
+
+The configured base machine chances total 100%. Current values are starting balance data for playtests. Rarity may influence average expected power, but should not map directly to a fixed multiplier ladder.
 
 Avoid:
 

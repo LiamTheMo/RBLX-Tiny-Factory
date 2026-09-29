@@ -50,6 +50,18 @@ local function createPart(parent: Instance, name: string, size: Vector3, positio
 	return part
 end
 
+local function addSlotClickDetector(part: BasePart, slotIndex: number)
+	part:SetAttribute("FactorySlotIndex", slotIndex)
+	if not FactoryLayout.isEditableMachineSlot(slotIndex) then
+		return
+	end
+	local detector = Instance.new("ClickDetector")
+	detector.Name = "FactorySlotClick"
+	detector.MaxActivationDistance = 32
+	detector:SetAttribute("FactorySlotIndex", slotIndex)
+	detector.Parent = part
+end
+
 local function createPlaceholderPlot(player: Player): (Folder, Vector3)
 	local plotsFolder = workspace:FindFirstChild("TinyFactoryPlots")
 	if not plotsFolder then
@@ -61,20 +73,21 @@ local function createPlaceholderPlot(player: Player): (Folder, Vector3)
 	nextPlotIndex += 1
 	local origin = Vector3.new((nextPlotIndex - 1) * 36, 0, 0)
 	local plot = Instance.new("Folder")
-	plot.Name = `Factory_{player.UserId}`
+	plot.Name = string.format("Factory_%d", player.UserId)
 	plot:SetAttribute("OwnerUserId", player.UserId)
 	plot.Parent = plotsFolder
 
 	createPart(plot, "PlotBase", Vector3.new(30, 0.5, 8), origin + Vector3.new(12, -0.25, 0), Color3.fromRGB(73, 55, 42))
-	for slotIndex = 0, FactoryLayout.SlotCount - 1 do
-		local belt = createPart(plot, `Conveyor_{slotIndex + 1}`, Vector3.new(5.5, 0.15, 2), origin + Vector3.new(slotIndex * 6, 0.1, 0), Color3.fromRGB(66, 75, 84))
+	for slotIndex = 1, FactoryLayout.SlotCount do
+		local offset = (slotIndex - 1) * 6
+		local belt = createPart(plot, string.format("Conveyor_%d", slotIndex), Vector3.new(5.5, 0.15, 2), origin + Vector3.new(offset, 0.1, 0), Color3.fromRGB(66, 75, 84))
 		belt.Material = Enum.Material.Metal
-		local stripe = createPart(plot, `ConveyorGuide_{slotIndex + 1}`, Vector3.new(4.2, 0.02, 0.16), origin + Vector3.new(slotIndex * 6, 0.2, 0), Color3.fromRGB(90, 210, 230))
+		addSlotClickDetector(belt, slotIndex)
+		local stripe = createPart(plot, string.format("ConveyorGuide_%d", slotIndex), Vector3.new(4.2, 0.02, 0.16), origin + Vector3.new(offset, 0.2, 0), Color3.fromRGB(90, 210, 230))
 		stripe.Material = Enum.Material.Neon
 	end
 	return plot, origin
 end
-
 local function updateDebugAttributes(player: Player, factory: any)
 	local snapshot = factory.simulation:getSnapshot()
 	player:SetAttribute("FactoryCoins", snapshot.Coins)
@@ -95,6 +108,14 @@ local function refreshMachineVisuals(factory: any)
 	machineFolder = Instance.new("Folder")
 	machineFolder.Name = "Machines"
 	machineFolder.Parent = factory.plot
+
+	for slotIndex = 1, FactoryLayout.EditableSlotCount do
+		local belt = factory.plot:FindFirstChild(string.format("Conveyor_%d", slotIndex))
+		local detector = belt and belt:FindFirstChild("FactorySlotClick")
+		if detector and detector:IsA("ClickDetector") then
+			detector.MaxActivationDistance = if factory.layout[slotIndex] then 0 else 32
+		end
+	end
 
 	local colors = {
 		Producer = Color3.fromRGB(82, 145, 255),
@@ -123,6 +144,7 @@ local function refreshMachineVisuals(factory: any)
 				machinePart:SetAttribute("MachineId", definition.Id)
 				machinePart:SetAttribute("DisplayName", definition.DisplayName)
 				machinePart:SetAttribute("Description", definition.Description)
+				addSlotClickDetector(machinePart, slotIndex)
 				machinePart:SetAttribute("Rarity", definition.Rarity)
 				machinePart:SetAttribute("Behavior", definition.Behavior or "Infrastructure")
 
@@ -252,7 +274,7 @@ local function placeMachine(player: Player, machineId: any, slotIndex: any, repl
 	if previousMachineId and replaceRequested ~= true then
 		return buildResponse(factory, false, "Slot is occupied")
 	end
-	if previousMachineId and slotIndex == FactoryLayout.SlotCount then
+	if previousMachineId and slotIndex == FactoryLayout.SellerSlotIndex then
 		return buildResponse(factory, false, "The seller is fixed infrastructure")
 	end
 	if (factory.inventory[machineId] or 0) <= 0 then
@@ -293,7 +315,7 @@ local function removeMachine(player: Player, slotIndex: any)
 	if not valid then
 		return buildResponse(factory, false, errorMessage)
 	end
-	if slotIndex == 1 or slotIndex == FactoryLayout.SlotCount then
+	if slotIndex == 1 or slotIndex == FactoryLayout.SellerSlotIndex then
 		return buildResponse(factory, false, "The producer and seller are required")
 	end
 	local machineId = factory.layout[slotIndex]
