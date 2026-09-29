@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local EconomyConfig = require(Shared:WaitForChild("EconomyConfig"))
 local MachineDefinitions = require(Shared:WaitForChild("MachineDefinitions"))
 local EconomyRules = require(Shared:WaitForChild("EconomyRules"))
 
@@ -16,13 +17,18 @@ local started = false
 local sequence = 0
 local toastSequence = 0
 
-local rarityColors = {
-	Common = Color3.fromRGB(225, 225, 225),
-	Uncommon = Color3.fromRGB(110, 239, 151),
-	Rare = Color3.fromRGB(99, 178, 255),
-	Epic = Color3.fromRGB(195, 116, 255),
-	Legendary = Color3.fromRGB(255, 202, 70),
-}
+local rarityColors: { [string]: Color3 } = {}
+for _, band in ipairs(EconomyConfig.RarityOddsBands) do
+	local color = band.Color
+	rarityColors[band.Name] = Color3.fromRGB(color[1], color[2], color[3])
+end
+local firstRarityBand = EconomyConfig.RarityOddsBands[1]
+local defaultRarityColor = if firstRarityBand then rarityColors[firstRarityBand.Name] else nil
+defaultRarityColor = defaultRarityColor or Color3.new(1, 1, 1)
+
+local function getRarityColor(rarity: string): Color3
+	return rarityColors[rarity] or defaultRarityColor
+end
 
 function EffectsController.register(eventName: string, handler: ({ [string]: any }) -> ())
 	handlers[eventName] = handler
@@ -87,7 +93,7 @@ function EffectsController.start()
 	corner.Parent = card
 	local stroke = Instance.new("UIStroke")
 	stroke.Thickness = 4
-	stroke.Color = rarityColors.Common
+	stroke.Color = getRarityColor("Common")
 	stroke.Parent = card
 	local scale = Instance.new("UIScale")
 	scale.Parent = card
@@ -133,7 +139,7 @@ function EffectsController.start()
 		overlay.Visible = true
 		heading.Text = "ROLLING A MACHINE"
 		card.Text = "? ? ?"
-		stroke.Color = rarityColors.Common
+		stroke.Color = getRarityColor("Common")
 		scale.Scale = 1
 		pulse = TweenService:Create(scale, TweenInfo.new(0.42, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { Scale = 1.07 })
 		pulse:Play()
@@ -166,14 +172,14 @@ function EffectsController.start()
 			end
 			card.Rotation = 0
 			card.Text = if definition and odds then `{definition.DisplayName} · {odds}` else definition and definition.DisplayName or "New machine"
-			stroke.Color = rarityColors[rarity] or rarityColors.Common
+			stroke.Color = rarityColors[rarity] or getRarityColor("Common")
 			heading.Text = string.upper(rarity) .. " MACHINE!"
 			scale.Scale = 1.25
 			TweenService:Create(scale, TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
 			task.wait(1.2)
 			if token == sequence then
 				overlay.Visible = false
-				showToast("Added to inventory", rarityColors[rarity] or rarityColors.Common)
+				showToast("Added to inventory", rarityColors[rarity] or getRarityColor("Common"))
 			end
 		end)
 	end)
@@ -187,16 +193,16 @@ function EffectsController.start()
 		showToast(payload.Reason or "Roll unavailable", Color3.fromRGB(255, 150, 120))
 	end)
 	EffectsController.register("FirstItemSpawned", function()
-		showToast("Your dropper made its first item!", rarityColors.Rare)
+		showToast("Your dropper made its first item!", getRarityColor("Rare"))
 	end)
 	EffectsController.register("FirstItemSold", function()
-		showToast("First sale! The seller earned Coins.", rarityColors.Uncommon)
+		showToast("First sale! The seller earned Coins.", getRarityColor("Uncommon"))
 	end)
 	EffectsController.register("LootSpawned", function()
-		showToast("A glowing Coin drop appeared nearby", rarityColors.Legendary)
+		showToast("A glowing Coin drop appeared nearby", getRarityColor("Legendary"))
 	end)
 	EffectsController.register("LootClaimed", function(payload)
-		showToast(`Found +{payload.Coins or 0} Coins!`, rarityColors.Legendary)
+		showToast(`Found +{payload.Coins or 0} Coins!`, getRarityColor("Legendary"))
 	end)
 
 	remote.OnClientEvent:Connect(function(eventName: string, payload: { [string]: any })
