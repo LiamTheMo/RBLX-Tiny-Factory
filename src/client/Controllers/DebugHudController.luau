@@ -1,6 +1,7 @@
 --!strict
 
 local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
 
 local DebugHudController = {}
 local started = false
@@ -99,13 +100,18 @@ function DebugHudController.start()
 	local camera = workspace.CurrentCamera
 	if camera then
 		local function layout()
-			local compact = camera.ViewportSize.X < 600
-			for _, label in ipairs({ title, coins, activeItems, production, sold, capacity, dataStatus }) do
-				label.Size = UDim2.fromOffset(if compact then 190 else 260, 26)
-				label.TextSize = if compact then 14 else 16
+			local viewportWidth = camera.ViewportSize.X
+			local compact = viewportWidth < 760 or (UserInputService.TouchEnabled and viewportWidth < 1000)
+			screenGui.Enabled = not compact
+			if compact then
+				return
 			end
-			guide.Size = UDim2.fromOffset(if compact then 190 else 260, if compact then 52 else 44)
-			guide.TextSize = if compact then 12 else 13
+			for _, label in ipairs({ title, coins, activeItems, production, sold, capacity, dataStatus }) do
+				label.Size = UDim2.fromOffset(260, 28)
+				label.TextSize = 16
+			end
+			guide.Size = UDim2.fromOffset(260, 44)
+			guide.TextSize = 13
 		end
 		camera:GetPropertyChangedSignal("ViewportSize"):Connect(layout)
 		layout()

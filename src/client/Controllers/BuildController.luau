@@ -2,6 +2,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local MachineDefinitions = require(Shared:WaitForChild("MachineDefinitions"))
@@ -113,10 +114,16 @@ function BuildController.start()
 	slotsTitle.TextXAlignment = Enum.TextXAlignment.Left
 	slotsTitle.Parent = panel
 
-	local slotsList = Instance.new("Frame")
+	local slotsList = Instance.new("ScrollingFrame")
 	slotsList.Name = "SlotsList"
 	slotsList.BackgroundTransparency = 1
 	slotsList.Parent = panel
+	slotsList.AutomaticCanvasSize = Enum.AutomaticSize.X
+	slotsList.CanvasSize = UDim2.new(0, 0, 1, 0)
+	slotsList.Active = true
+	slotsList.ScrollingDirection = Enum.ScrollingDirection.X
+	slotsList.ScrollBarThickness = if UserInputService.TouchEnabled then 0 else 4
+	slotsList.ClipsDescendants = true
 	local slotsLayout = Instance.new("UIListLayout")
 	slotsLayout.FillDirection = Enum.FillDirection.Horizontal
 	slotsLayout.Padding = UDim.new(0, 4)
@@ -253,9 +260,9 @@ function BuildController.start()
 			local locked = slotIndex > 1 and slotIndex < state.SlotCount and slotIndex > state.Capacity + 1
 			local text = if locked then `Slot {slotIndex}\nLOCKED` elseif definition then `Slot {slotIndex}\n{definition.DisplayName}` else `Slot {slotIndex}\nEmpty`
 			local button = createButton(slotsList, `Slot_{slotIndex}`, text)
-			button.Size = UDim2.fromOffset(if compact then 54 else 62, if compact then 48 else 54)
+			button.Size = UDim2.fromOffset(if compact then 52 else 62, if compact then 48 else 54)
 			button.BackgroundColor3 = if locked then COLORS.Locked elseif sourceSlot == slotIndex then COLORS.Selected else COLORS.Button
-			button.TextSize = if compact then 9 else 10
+			button.TextSize = 10
 			button.Activated:Connect(function()
 				handleSlot(slotIndex)
 			end)
@@ -284,26 +291,36 @@ function BuildController.start()
 		setStatus("This v1 route runs left to right; orientation is fixed by design.", nil)
 	end)
 
-	local function layout(viewportWidth: number)
-		compact = viewportWidth < 600
-		panel.Size = if compact then UDim2.fromOffset(304, 360) else UDim2.fromOffset(360, 380)
-		panel.Position = if compact then UDim2.fromOffset(8, 202) else UDim2.fromOffset(16, 188)
+	local function layout(viewportWidth: number, viewportHeight: number)
+		compact = viewportWidth < 760 or (UserInputService.TouchEnabled and viewportWidth < 1000)
+		local compactLandscape = compact and viewportWidth > viewportHeight
+		local panelWidth = 360
+		if compact then
+			local widthRatio = if compactLandscape then 0.34 else 0.68
+			panelWidth = math.floor(math.clamp(viewportWidth * widthRatio, 232, 272))
+			panelWidth = math.min(panelWidth, math.max(184, viewportWidth - 16))
+		end
+		panel.Size = if compact then UDim2.fromOffset(panelWidth, 282) else UDim2.fromOffset(panelWidth, 380)
+		panel.Position = if compactLandscape
+			then UDim2.new(1, -panelWidth - 8, 0, 8)
+			elseif compact then UDim2.fromOffset(8, 214)
+			else UDim2.fromOffset(16, 188)
 		title.Position = UDim2.fromOffset(8, 8)
-		title.Size = UDim2.new(1, -16, 0, 28)
-		status.Position = UDim2.fromOffset(8, 38)
-		status.Size = UDim2.new(1, -16, 0, 30)
-		inventoryTitle.Position = UDim2.fromOffset(8, 72)
-		inventoryTitle.Size = UDim2.new(1, -16, 0, 20)
-		inventoryList.Position = UDim2.fromOffset(8, 94)
-		inventoryList.Size = UDim2.new(1, -16, 0, if compact then 82 else 92)
-		slotsTitle.Position = UDim2.fromOffset(8, if compact then 180 else 190)
-		slotsTitle.Size = UDim2.new(1, -16, 0, 20)
-		slotsList.Position = UDim2.fromOffset(8, if compact then 202 else 212)
-		slotsList.Size = UDim2.new(1, -16, 0, 58)
-		local actionY = if compact then 270 else 286
+		title.Size = UDim2.new(1, -16, 0, if compact then 24 else 28)
+		status.Position = UDim2.fromOffset(8, if compact then 34 else 38)
+		status.Size = UDim2.new(1, -16, 0, if compact then 30 else 30)
+		inventoryTitle.Position = UDim2.fromOffset(8, if compact then 68 else 72)
+		inventoryTitle.Size = UDim2.new(1, -16, 0, if compact then 18 else 20)
+		inventoryList.Position = UDim2.fromOffset(8, if compact then 88 else 94)
+		inventoryList.Size = UDim2.new(1, -16, 0, if compact then 56 else 92)
+		slotsTitle.Position = UDim2.fromOffset(8, if compact then 150 else 190)
+		slotsTitle.Size = UDim2.new(1, -16, 0, 18)
+		slotsList.Position = UDim2.fromOffset(8, if compact then 172 else 212)
+		slotsList.Size = UDim2.new(1, -16, 0, if compact then 50 else 58)
+		local actionY = if compact then 230 else 286
 		for index, button in ipairs({ remove, cancel, orientation }) do
 			button.Position = UDim2.new((index - 1) / 3, 6, 0, actionY)
-			button.Size = UDim2.new(1 / 3, -10, 0, 34)
+			button.Size = UDim2.new(1 / 3, -10, 0, if compact then 38 else 34)
 		end
 		render()
 	end
@@ -311,11 +328,11 @@ function BuildController.start()
 	local camera = workspace.CurrentCamera
 	if camera then
 		camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
-			layout(camera.ViewportSize.X)
+			layout(camera.ViewportSize.X, camera.ViewportSize.Y)
 		end)
-		layout(camera.ViewportSize.X)
+		layout(camera.ViewportSize.X, camera.ViewportSize.Y)
 	else
-		layout(1000)
+		layout(1000, 800)
 	end
 	setStatus("Select a machine or a processor slot to begin.", nil)
 	refresh()
