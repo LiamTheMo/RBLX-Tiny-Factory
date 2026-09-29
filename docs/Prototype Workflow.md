@@ -1,6 +1,6 @@
 # Tiny Factory prototype
 
-This branch keeps the first playable factory loop on a temporary baseplate. A placeholder Dropper visibly releases cubes onto a five-area conveyor. All areas can be clicked; the contextual inventory opens for placement, replacement, valid moves, and processor returns. A persistent Inventory button shows every owned machine, including installed machines, with available and placed counts. The Seller is rollable and can move to any valid end of the one production route.
+This branch keeps the first playable factory loop on a temporary baseplate. A placeholder Dropper visibly releases cubes onto a four-area conveyor with a dark belt, raised guide rails, cross rollers, support legs, and a visible label for each click area. All areas can be clicked; the contextual inventory opens for placement, replacement, valid moves, and processor returns. A persistent Inventory button shows every owned machine, including installed machines, with available and placed counts. The Seller is rollable and can move to any valid end of the one production route.
 
 Players roll machines for free every three seconds, buy limited capacity with Coins, and collect public Coin or temporary Luck boosters on Humanoid touch.
 
@@ -11,9 +11,11 @@ Players roll machines for free every three seconds, buy limited capacity with Co
 3. Playtest the loop: roll, wait for cooldown, click both empty and occupied conveyor areas, place or move a machine, watch cubes fall onto the conveyor and reach the Seller, buy capacity, run over Coin and Luck boosters, and reconnect to check persistence.
 4. Test desktop, phone, and two-player Studio sessions before publishing. The server owns cooldowns, machine grants, booster selection, placement, and rewards.
 
+The v1.02 save migration compresses the previous five-area layout into four areas, returns a displaced processor to inventory, and clamps the old capacity to the new limit.
+
 World boosters use a downward raycast to find a collidable land surface. The placeholder plot models are excluded from the ray so drops land on the terrain beneath them; water and steep side faces are skipped. Each booster appears above the surface, fades in while falling, and only becomes touch-pickable after landing.
 
-tests/studio/PrototypeSmoke.luau is a repeatable local Studio playtest for the built place. Run it with Studio's RunScript command-line task and --localPlaceFile TinyFactory.rbxlx. It checks inventory ownership, contextual placement UI, roll odds and rarity, free rolls and cooldown, Seller movement, production and sale, recycling, capacity, timed Luck, all five physical click areas, the temporary Dropper model, booster landing, Humanoid touch pickup, and duplicate-claim protection. The regular GitHub runner cannot execute this Studio-only test.
+tests/studio/PrototypeSmoke.luau is a repeatable local Studio playtest for the built place. Run it with Studio's RunScript command-line task and --localPlaceFile TinyFactory.rbxlx. It checks inventory ownership, contextual placement UI, roll odds and rarity, free rolls and cooldown, Seller movement, production and sale, recycling, capacity, timed Luck, all four physical click areas, the temporary Dropper model, booster landing, Humanoid touch pickup, and duplicate-claim protection. The regular GitHub runner cannot execute this Studio-only test.
 
 The event presentation registry is in src/client/Controllers/EffectsController.luau. Server systems announce moments through EffectService.fire(player, eventName, payload). Add a new visual or short cutscene by registering an event handler in the client controller. These effects are cosmetic; the server owns inventory, RNG, loot rewards, production, and Coins. The ultra-rare roll presentation is configured in EconomyConfig; its odds threshold and duration can be changed without modifying the roll algorithm. Studio smoke tests exercise the cutscene event with synthetic 1/10,001 odds so no extremely rare live machine is required.
 

@@ -63,6 +63,10 @@ local function addSlotClickDetector(part: BasePart, slotIndex: number)
 	detector.Parent = part
 end
 
+local function colorFromRgb(channels: { number }): Color3
+	return Color3.fromRGB(channels[1], channels[2], channels[3])
+end
+
 local function createPlaceholderPlot(player: Player): (Folder, Vector3)
 	local plotsFolder = workspace:FindFirstChild("TinyFactoryPlots")
 	if not plotsFolder then
@@ -79,13 +83,89 @@ local function createPlaceholderPlot(player: Player): (Folder, Vector3)
 	plot.Parent = plotsFolder
 
 	createPart(plot, "PlotBase", Vector3.new(30, 0.5, 8), origin + Vector3.new(12, -0.25, 0), Color3.fromRGB(73, 55, 42))
+
+	local conveyor = MachineVisualConfig.Conveyor
+	local slotPitch = MachineVisualConfig.SlotPitch
+	local beltLength = slotPitch + conveyor.SegmentOverlap
+	local deckTop = conveyor.DeckCenterY + conveyor.DeckThickness / 2
 	for slotIndex = 1, FactoryLayout.SlotCount do
-		local offset = (slotIndex - 1) * 6
-		local belt = createPart(plot, string.format("Conveyor_%d", slotIndex), Vector3.new(5.5, 0.15, 2), origin + Vector3.new(offset, 0.1, 0), Color3.fromRGB(66, 75, 84))
-		belt.Material = Enum.Material.Metal
+		local offset = (slotIndex - 1) * slotPitch
+		local belt = createPart(
+			plot,
+			string.format("Conveyor_%d", slotIndex),
+			Vector3.new(beltLength, conveyor.DeckThickness, conveyor.BeltWidth),
+			origin + Vector3.new(offset, conveyor.DeckCenterY, 0),
+			colorFromRgb(conveyor.DeckColor)
+		)
+		belt.Material = Enum.Material.Rubber
 		addSlotClickDetector(belt, slotIndex)
-		local stripe = createPart(plot, string.format("ConveyorGuide_%d", slotIndex), Vector3.new(4.2, 0.02, 0.16), origin + Vector3.new(offset, 0.2, 0), Color3.fromRGB(90, 210, 230))
-		stripe.Material = Enum.Material.Neon
+
+		for rollerIndex = 1, conveyor.RollerCountPerSlot do
+			local rollerOffset = -slotPitch / 2 + ((rollerIndex - 0.5) * slotPitch / conveyor.RollerCountPerSlot)
+			local roller = createPart(
+				plot,
+				string.format("ConveyorRoller_%d_%d", slotIndex, rollerIndex),
+				Vector3.new(conveyor.RollerThickness, conveyor.RollerHeight, conveyor.BeltWidth + conveyor.RollerOverhang),
+				origin + Vector3.new(offset + rollerOffset, conveyor.RollerCenterY, 0),
+				colorFromRgb(conveyor.RollerColor)
+			)
+			roller.Material = Enum.Material.Metal
+			addSlotClickDetector(roller, slotIndex)
+		end
+
+		for sideIndex, side in ipairs({ -1, 1 }) do
+			local guideOffset = side * (conveyor.BeltWidth / 2 + conveyor.GuideThickness / 2)
+			local guide = createPart(
+				plot,
+				string.format("ConveyorGuide_%d_%d", slotIndex, sideIndex),
+				Vector3.new(beltLength, conveyor.GuideHeight, conveyor.GuideThickness),
+				origin + Vector3.new(offset, deckTop + conveyor.GuideHeight / 2, guideOffset),
+				colorFromRgb(conveyor.GuideColor)
+			)
+			guide.Material = Enum.Material.Metal
+			addSlotClickDetector(guide, slotIndex)
+
+			local accent = createPart(
+				plot,
+				string.format("ConveyorGuideAccent_%d_%d", slotIndex, sideIndex),
+				Vector3.new(beltLength, conveyor.GuideAccentHeight, conveyor.GuideAccentThickness),
+				origin + Vector3.new(offset, deckTop + conveyor.GuideHeight - conveyor.GuideAccentHeight / 2, guideOffset),
+				colorFromRgb(conveyor.GuideAccentColor)
+			)
+			accent.Material = Enum.Material.Neon
+			addSlotClickDetector(accent, slotIndex)
+
+			for supportIndex, supportOffset in ipairs({ -conveyor.SupportOffsetX, conveyor.SupportOffsetX }) do
+				local support = createPart(
+					plot,
+					string.format("ConveyorSupport_%d_%d_%d", slotIndex, sideIndex, supportIndex),
+					Vector3.new(conveyor.SupportThickness, conveyor.SupportHeight, conveyor.SupportThickness),
+					origin + Vector3.new(offset + supportOffset, conveyor.SupportHeight / 2, guideOffset),
+					colorFromRgb(conveyor.SupportColor)
+				)
+				support.Material = Enum.Material.Metal
+			end
+		end
+
+		local areaLabel = Instance.new("BillboardGui")
+		areaLabel.Name = string.format("ConveyorAreaLabel_%d", slotIndex)
+		areaLabel.Adornee = belt
+		areaLabel.AlwaysOnTop = true
+		areaLabel.MaxDistance = 100
+		areaLabel.Size = UDim2.fromOffset(90, 24)
+		areaLabel.StudsOffset = Vector3.new(0, conveyor.LabelHeight, conveyor.BeltWidth / 2 + conveyor.GuideThickness + 0.2)
+		areaLabel.Parent = belt
+
+		local areaText = Instance.new("TextLabel")
+		areaText.Name = "Label"
+		areaText.BackgroundTransparency = 1
+		areaText.Size = UDim2.fromScale(1, 1)
+		areaText.Text = string.format("AREA %d", slotIndex)
+		areaText.TextColor3 = colorFromRgb(conveyor.LabelColor)
+		areaText.TextSize = 12
+		areaText.TextStrokeTransparency = 0.35
+		areaText.Font = Enum.Font.GothamBold
+		areaText.Parent = areaLabel
 	end
 	return plot, origin
 end
@@ -116,10 +196,6 @@ local function refreshMachineVisuals(factory: any)
 		if detector and detector:IsA("ClickDetector") then
 			detector.MaxActivationDistance = 32
 		end
-	end
-
-	local function colorFromRgb(channels: { number }): Color3
-		return Color3.fromRGB(channels[1], channels[2], channels[3])
 	end
 
 	for slotIndex = 1, FactoryLayout.SlotCount do
