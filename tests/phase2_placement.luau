@@ -9,6 +9,14 @@ local function expect(condition: boolean, message: string)
 	end
 end
 
+expect(FactoryLayout.SlotCount == 5, "the temporary conveyor should have four machine slots and a seller")
+expect(FactoryLayout.EditableSlotCount == 4, "four machine positions should be editable")
+expect(FactoryLayout.SellerSlotIndex == 5, "the seller should remain the final position")
+for slotIndex = 1, FactoryLayout.EditableSlotCount do
+	expect(FactoryLayout.isEditableMachineSlot(slotIndex), "each of the first four conveyor positions should be clickable")
+end
+expect(not FactoryLayout.isEditableMachineSlot(FactoryLayout.SellerSlotIndex), "the fixed seller must not be editable")
+
 local defaultLayout = FactoryLayout.copy(FactoryLayout.Default)
 local valid, errorMessage = PlacementRules.validateLayout(defaultLayout)
 expect(valid, errorMessage or "default layout should be valid")

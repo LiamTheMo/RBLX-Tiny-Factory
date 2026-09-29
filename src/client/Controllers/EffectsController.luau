@@ -6,6 +6,7 @@ local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local EconomyConfig = require(Shared:WaitForChild("EconomyConfig"))
+local BoosterConfig = require(Shared:WaitForChild("BoosterConfig"))
 local MachineDefinitions = require(Shared:WaitForChild("MachineDefinitions"))
 local EconomyRules = require(Shared:WaitForChild("EconomyRules"))
 
@@ -30,6 +31,16 @@ end
 
 local function getRarityColor(rarity: string): Color3
 	return rarityColors[rarity] or defaultRarityColor
+end
+
+local function getBoosterColor(boosterId: string?): Color3
+	for _, booster in ipairs(BoosterConfig.Definitions) do
+		if booster.Id == boosterId then
+			local color = booster.Color
+			return Color3.fromRGB(color[1], color[2], color[3])
+		end
+	end
+	return getRarityColor("Legendary")
 end
 
 function EffectsController.register(eventName: string, handler: ({ [string]: any }) -> ())
@@ -87,8 +98,8 @@ function EffectsController.start()
 	card.TextScaled = true
 	card.TextWrapped = false
 	local cardTextLimit = Instance.new("UITextSizeConstraint")
-	cardTextLimit.MinTextSize = 9
-	cardTextLimit.MaxTextSize = 13
+	cardTextLimit.MinTextSize = 12
+	cardTextLimit.MaxTextSize = 18
 	cardTextLimit.Parent = card
 	card.Parent = overlay
 	local sizeLimit = Instance.new("UISizeConstraint")
@@ -163,7 +174,7 @@ function EffectsController.start()
 		local rarity = payload.Rarity or "Legendary"
 		local rarityColor = getRarityColor(rarity)
 		stroke.Color = rarityColor
-		card.Text = `{payload.MachineName or "New machine"} · {rarity} · {payload.Odds or "1/?"}`
+		card.Text = string.format("%s · %s", payload.MachineName or "New machine", payload.Odds or "1/?")
 		scale.Scale = 0.72
 		TweenService:Create(scale, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
 		task.delay(EconomyConfig.UltraRareCutscene.DurationSeconds, function()
@@ -183,9 +194,11 @@ function EffectsController.start()
 		end
 		overlay.Visible = true
 		heading.Text = "ROLLING A MACHINE"
-		local pool = MachineDefinitions.getRollPool()
+		local basePool = MachineDefinitions.getRollPool()
+		local luckMultiplier = payload.LuckMultiplier or 1
+		local pool = EconomyRules.getLuckAdjustedRollPool(basePool, luckMultiplier)
 		local definition = MachineDefinitions.get(payload.MachineId or "")
-		local rarity = payload.Rarity or "Common"
+		local rarity = payload.Rarity or (definition and EconomyRules.getMachineRarity(definition.Id, pool)) or "Common"
 		local odds = if definition then EconomyRules.getMachineOddsLabel(definition.Id, pool) else nil
 		task.spawn(function()
 			for index = 1, 16 do
@@ -194,8 +207,9 @@ function EffectsController.start()
 				end
 				local sample = pool[(index * 7) % #pool + 1]
 				local sampleOdds = EconomyRules.getMachineOddsLabel(sample.Id, pool) or "1/?"
-				card.Text = `{sample.DisplayName} · {sample.Rarity} · {sampleOdds}`
-				stroke.Color = getRarityColor(sample.Rarity)
+				card.Text = string.format("%s · %s", sample.DisplayName, sampleOdds)
+				local sampleRarity = EconomyRules.getMachineRarity(sample.Id, pool) or sample.Rarity
+				stroke.Color = getRarityColor(sampleRarity)
 				card.Rotation = if index % 2 == 0 then 2 else -2
 				task.wait(0.045 + index * 0.005)
 			end
@@ -203,7 +217,7 @@ function EffectsController.start()
 				return
 			end
 			card.Rotation = 0
-			card.Text = if definition and odds then `{definition.DisplayName} · {rarity} · {odds}` else `New machine · {rarity}`
+			card.Text = if definition and odds then string.format("%s · %s", definition.DisplayName, odds) else "New machine"
 			stroke.Color = getRarityColor(rarity)
 			heading.Text = string.upper(rarity) .. " MACHINE!"
 			scale.Scale = 1.25
@@ -242,11 +256,16 @@ function EffectsController.start()
 	EffectsController.register("FirstItemSold", function()
 		showToast("First sale! The seller earned Coins.", getRarityColor("Uncommon"))
 	end)
-	EffectsController.register("LootSpawned", function()
-		showToast("A glowing Coin drop appeared nearby", getRarityColor("Legendary"))
+	EffectsController.register("LootSpawned", function(payload)
+		showToast("A booster appeared nearby", getBoosterColor(payload.BoosterId))
 	end)
 	EffectsController.register("LootClaimed", function(payload)
-		showToast(`Found +{payload.Coins or 0} Coins!`, getRarityColor("Legendary"))
+		local boosterColor = getBoosterColor(payload.BoosterId)
+		if payload.BoosterId == "Luck" then
+			showToast(string.format("Luck x%.1f · %ds", payload.Multiplier or 2, payload.DurationSeconds or 0), boosterColor)
+		else
+			showToast(string.format("Found +%d Coins!", payload.Coins or 0), boosterColor)
+		end
 	end)
 
 	remote.OnClientEvent:Connect(function(eventName: string, payload: { [string]: any })
