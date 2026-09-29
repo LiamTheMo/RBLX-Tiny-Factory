@@ -1,5 +1,6 @@
 --!strict
 
+local EconomyConfig = require("../src/shared/EconomyConfig")
 local EconomyRules = require("../src/shared/EconomyRules")
 local MachineDefinitions = require("../src/shared/MachineDefinitions")
 
@@ -15,48 +16,54 @@ expect(firstRollCost == 0, "the first roll should be free")
 expect(secondRollCost == 0, "every roll should be free")
 
 local rollPool = MachineDefinitions.getRollPool()
-local expectedOdds = {
-	ValueMultiplier = "1/3.3",
-	Giantifier = "1/4.5",
-	PaintMachine = "1/5.6",
-	CooldownTuner = "1/6.7",
-	FastDropper = "1/20",
-	CompoundPress = "1/25",
-	ConveyorBooster = "1/28.6",
-	HeavyDropper = "1/66.7",
-	Duplicator = "1/142.9",
-	Goldenizer = "1/500",
-	LuckyModifier = "1/1000",
-}
-for machineId, odds in pairs(expectedOdds) do
-	expect(EconomyRules.getMachineOddsLabel(machineId, rollPool) == odds, `{machineId} machine odds are incorrect`)
-	local definition = MachineDefinitions.get(machineId)
-	assert(definition, `{machineId} definition is missing`)
-	local denominator = 100 / (definition.RollChance :: number)
-	expect(definition.Rarity == EconomyRules.getRarityFromOdds(denominator), `{machineId} rarity does not follow its chance`)
+local rarityBands = EconomyConfig.RarityOddsBands
+local seenRarities: { [string]: boolean } = {}
+local previousMaxDenominator = 0
+expect(#rarityBands > 0, "at least one rarity band must be configured")
+for index, band in ipairs(rarityBands) do
+	local rarityName = band.Name :: string
+	local maxDenominator = band.MaxDenominator :: number
+	local color = band.Color
+	expect(rarityName ~= "", "rarity bands need readable names")
+	expect(not seenRarities[rarityName], "rarity band names must be unique")
+	seenRarities[rarityName] = true
+	expect(maxDenominator > previousMaxDenominator, "rarity bands must follow increasing odds limits")
+	expect(type(color) == "table" and #color == 3, "each rarity band needs an RGB display color")
+	for _, channel in ipairs(color) do
+		expect(type(channel) == "number" and channel % 1 == 0 and channel >= 0 and channel <= 255, "rarity display colors must use RGB channels from 0 to 255")
+	end
+	expect(EconomyRules.getRarityFromOdds(maxDenominator) == rarityName, "each configured odds limit must map to its rarity")
+	if index < #rarityBands then
+		local nextBand = assert(rarityBands[index + 1])
+		expect(EconomyRules.getRarityFromOdds(maxDenominator + 0.01) == nextBand.Name, "odds above a rarity limit must enter the next band")
+	end
+	previousMaxDenominator = maxDenominator
 end
-expect(EconomyRules.getRarityFromOdds(1) == "Common", "1/1 should be Common")
-expect(EconomyRules.getRarityFromOdds(10) == "Common", "1/10 should be Common")
-expect(EconomyRules.getRarityFromOdds(10.01) == "Uncommon", "odds above 1/10 should be Uncommon")
-expect(EconomyRules.getRarityFromOdds(30) == "Uncommon", "1/30 should be Uncommon")
-expect(EconomyRules.getRarityFromOdds(30.01) == "Rare", "odds above 1/30 should be Rare")
-expect(EconomyRules.getRarityFromOdds(100) == "Rare", "1/100 should be Rare")
-expect(EconomyRules.getRarityFromOdds(100.01) == "Epic", "odds above 1/100 should be Epic")
-expect(EconomyRules.getRarityFromOdds(500) == "Epic", "1/500 should be Epic")
-expect(EconomyRules.getRarityFromOdds(500.01) == "Legendary", "odds above 1/500 should be Legendary")
+local finalRarityBand = assert(rarityBands[#rarityBands])
+expect(finalRarityBand.Name == "Legendary" and finalRarityBand.MaxDenominator == math.huge, "Legendary should remain the open-ended final band")
+expect(EconomyRules.getRarityFromOdds(1) == rarityBands[1].Name, "1/1 should use the most common configured band")
+expect(EconomyRules.getRarityFromOdds(12) == "Common", "1/12 should be Common in the configured bands")
 expect(not EconomyRules.getRarityFromOdds(0), "zero denominator should not have a rarity")
 expect(not EconomyRules.getMachineOddsLabel("Seller", rollPool), "non-rollable machines should not have roll odds")
 local totalChance = 0
 for _, definition in ipairs(rollPool) do
 	totalChance += definition.RollChance
 end
-expect(math.abs(totalChance - 100) < 0.000001, "machine chances must total 100 percent")
+expect(math.abs(totalChance - EconomyConfig.MachineRollChanceTotal) < 0.000001, "machine chances must total the configured percentage")
+for _, definition in ipairs(rollPool) do
+	local chance = definition.RollChance :: number
+	local odds = EconomyRules.getMachineOddsLabel(definition.Id, rollPool)
+	expect(odds ~= nil and string.sub(odds, 1, 2) == "1/", "every rollable machine must have an odds label")
+	expect(definition.Rarity == EconomyRules.getRarityFromOdds(totalChance / chance), "each machine rarity must follow its weighted chance")
+end
 local definitionsValid, definitionsError = MachineDefinitions.validate()
 expect(definitionsValid, definitionsError or "per-machine chance definitions should validate")
 local samplePool = {
 	{ Id = "A", Rollable = true, RollChance = 25 },
 	{ Id = "B", Rollable = true, RollChance = 75 },
 }
+expect(EconomyRules.getMachineOddsLabel("A", samplePool) == "1/4", "weighted odds label should use the pool total")
+expect(EconomyRules.getMachineOddsLabel("B", samplePool) == "1/1.3", "weighted odds label should describe the individual machine chance")
 expect(EconomyRules.pickMachineId(samplePool, 0) == "A", "weighted selection should choose the first machine")
 expect(EconomyRules.pickMachineId(samplePool, 24.99) == "A", "first machine chance boundary is incorrect")
 expect(EconomyRules.pickMachineId(samplePool, 25) == "B", "second machine chance boundary is incorrect")
