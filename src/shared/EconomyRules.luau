@@ -30,41 +30,78 @@ function EconomyRules.canRoll(nextRollAt: number, now: number, inventoryCount: n
 	return true
 end
 
--- Returns the per-machine chance as a reciprocal (1 in N rolls), rounded to one decimal.
-function EconomyRules.getMachineOddsLabel(rarity: any, rollPool: { [number]: any }): string?
-	if type(rarity) ~= "string" or type(rollPool) ~= "table" then
+-- Returns the rarity tier for an exact reciprocal chance (for example, 1/12 is Uncommon).
+function EconomyRules.getRarityFromOdds(denominator: any): string?
+	if type(denominator) ~= "number" or denominator < 1 then
 		return nil
 	end
-	local weights = EconomyConfig.RarityWeights :: { [string]: number }
-	local rarityWeight = weights[rarity]
-	if not rarityWeight or rarityWeight <= 0 then
+	local thresholds = EconomyConfig.RarityOddsThresholds
+	if denominator <= thresholds.Common then
+		return "Common"
+	elseif denominator <= thresholds.Uncommon then
+		return "Uncommon"
+	elseif denominator <= thresholds.Rare then
+		return "Rare"
+	elseif denominator <= thresholds.Epic then
+		return "Epic"
+	end
+	return "Legendary"
+end
+
+-- RollChance values are percentage weights whose configured total is 100.
+function EconomyRules.getMachineOddsLabel(machineId: any, rollPool: { [number]: any }): string?
+	if type(machineId) ~= "string" or type(rollPool) ~= "table" then
 		return nil
 	end
 
-	local machinesInRarity = 0
+	local totalChance = 0
+	local machineChance: number? = nil
 	for _, definition in ipairs(rollPool) do
-		if type(definition) == "table" and definition.Rollable == true and definition.Rarity == rarity then
-			machinesInRarity += 1
+		if type(definition) == "table" and definition.Rollable == true and type(definition.RollChance) == "number" and definition.RollChance > 0 then
+			totalChance += definition.RollChance
+			if definition.Id == machineId then
+				machineChance = definition.RollChance
+			end
 		end
 	end
-	if machinesInRarity == 0 then
+	if not machineChance or totalChance <= 0 then
 		return nil
 	end
 
-	local totalWeight = 0
-	for _, weight in pairs(weights) do
-		if weight > 0 then
-			totalWeight += weight
-		end
-	end
-	if totalWeight <= 0 then
+	local denominator = totalChance / machineChance
+	local rounded = math.floor(denominator * 10 + 0.5) / 10
+	local denominatorText = if rounded % 1 == 0 then string.format("%.0f", rounded) else string.format("%.1f", rounded)
+	return "1/" .. denominatorText
+end
+
+-- Selects one machine from its own RollChance weight. `roll` must be in [0, total chance).
+function EconomyRules.pickMachineId(rollPool: { [number]: any }, roll: number): string?
+	if type(rollPool) ~= "table" or type(roll) ~= "number" or roll < 0 then
 		return nil
 	end
 
-	local rollsPerMachine = totalWeight * machinesInRarity / rarityWeight
-	local rounded = math.floor(rollsPerMachine * 10 + 0.5) / 10
-	local denominator = if rounded % 1 == 0 then string.format("%.0f", rounded) else string.format("%.1f", rounded)
-	return "1/" .. denominator
+	local totalChance = 0
+	for _, definition in ipairs(rollPool) do
+		if type(definition) == "table" and definition.Rollable == true and type(definition.RollChance) == "number" and definition.RollChance > 0 then
+			totalChance += definition.RollChance
+		end
+	end
+	if totalChance <= 0 or roll >= totalChance then
+		return nil
+	end
+
+	local cursor = 0
+	local lastMachineId: string? = nil
+	for _, definition in ipairs(rollPool) do
+		if type(definition) == "table" and definition.Rollable == true and type(definition.RollChance) == "number" and definition.RollChance > 0 then
+			cursor += definition.RollChance
+			lastMachineId = definition.Id
+			if roll < cursor then
+				return definition.Id
+			end
+		end
+	end
+	return lastMachineId
 end
 
 function EconomyRules.getCapacityCost(capacity: any): (number?, string?)
@@ -76,32 +113,6 @@ function EconomyRules.getCapacityCost(capacity: any): (number?, string?)
 		return nil, "Capacity is already at the maximum"
 	end
 	return cost
-end
-
-function EconomyRules.weightedPick(weights: { [string]: number }, roll: number): string?
-	if roll < 0 then
-		return nil
-	end
-	local total = 0
-	for _, weight in pairs(weights) do
-		if weight > 0 then
-			total += weight
-		end
-	end
-	if total <= 0 or roll >= total then
-		return nil
-	end
-
-	local cursor = 0
-	for name, weight in pairs(weights) do
-		if weight > 0 then
-			cursor += weight
-			if roll < cursor then
-				return name
-			end
-		end
-	end
-	return nil
 end
 
 function EconomyRules.getResaleValue(rarity: any): number
