@@ -83,11 +83,15 @@ Every rollable machine has its own configured roll chance. The server selects fr
 
 | Rarity | Reciprocal denominator |
 | --- | --- |
-| Common | 1 to 10 |
-| Uncommon | greater than 10 to 30 |
-| Rare | greater than 30 to 100 |
-| Epic | greater than 100 to 500 |
-| Legendary | greater than 500 |
+| Common | 1 to 100 |
+| Uncommon | greater than 100 to 500 |
+| Rare | greater than 500 to 2,500 |
+| Epic | greater than 2,500 to 10,000 |
+| Legendary | greater than 10,000 |
+
+Each upper denominator limit is inclusive: for example, 1/100 is Common and odds just rarer than 1/100 are Uncommon. Legendary is the final open-ended band; a future tier can be inserted by adding an ordered rarity-band entry before it.
+
+The ordered rarity bands, denominator limits, and reveal colors are defined once in shared economy configuration. Rollable machines keep distinct weighted chances alongside their definitions; both rarity and the displayed 1/x odds are derived from those weights.
 
 The configured machine chances total 100%. The current values are starting balance data and should be retuned from playtests. Rarity may influence average expected power, but should not map directly to a fixed multiplier ladder.
 
