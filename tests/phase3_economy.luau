@@ -1,6 +1,7 @@
 --!strict
 
 local EconomyRules = require("../src/shared/EconomyRules")
+local MachineDefinitions = require("../src/shared/MachineDefinitions")
 
 local function expect(condition: boolean, message: string)
 	if not condition then
@@ -12,6 +13,14 @@ local firstRollCost = EconomyRules.getRollCost(0)
 local secondRollCost = EconomyRules.getRollCost(1)
 expect(firstRollCost == 0, "the first roll should be free")
 expect(secondRollCost == 0, "every roll should be free")
+
+local rollPool = MachineDefinitions.getRollPool()
+expect(EconomyRules.getMachineOddsLabel("Common", rollPool) == "1/5.7", "common per-machine odds are incorrect")
+expect(EconomyRules.getMachineOddsLabel("Uncommon", rollPool) == "1/15", "uncommon per-machine odds are incorrect")
+expect(EconomyRules.getMachineOddsLabel("Rare", rollPool) == "1/12.5", "rare per-machine odds are incorrect")
+expect(EconomyRules.getMachineOddsLabel("Epic", rollPool) == "1/111.1", "epic per-machine odds are incorrect")
+expect(EconomyRules.getMachineOddsLabel("Legendary", rollPool) == "1/500", "legendary per-machine odds are incorrect")
+expect(not EconomyRules.getMachineOddsLabel("Infrastructure", rollPool), "non-rollable rarity must not have roll odds")
 
 local invalidRoll = EconomyRules.getRollCost(-1)
 expect(not invalidRoll, "negative roll counts must be rejected")

@@ -4,7 +4,9 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
-local MachineDefinitions = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("MachineDefinitions"))
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local MachineDefinitions = require(Shared:WaitForChild("MachineDefinitions"))
+local EconomyRules = require(Shared:WaitForChild("EconomyRules"))
 
 -- A small event registry keeps presentation separate from gameplay authority.
 -- New moments can register a handler without changing the economy or factory services.
@@ -148,6 +150,7 @@ function EffectsController.start()
 		local pool = MachineDefinitions.getRollPool()
 		local definition = MachineDefinitions.get(payload.MachineId or "")
 		local rarity = payload.Rarity or "Common"
+		local odds = if definition then EconomyRules.getMachineOddsLabel(definition.Rarity, pool) else nil
 		task.spawn(function()
 			for index = 1, 16 do
 				if token ~= sequence then
@@ -162,7 +165,7 @@ function EffectsController.start()
 				return
 			end
 			card.Rotation = 0
-			card.Text = definition and definition.DisplayName or "New machine"
+			card.Text = if definition and odds then `{definition.DisplayName} · {odds}` else definition and definition.DisplayName or "New machine"
 			stroke.Color = rarityColors[rarity] or rarityColors.Common
 			heading.Text = string.upper(rarity) .. " MACHINE!"
 			scale.Scale = 1.25

@@ -6,6 +6,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local MachineDefinitions = require(Shared:WaitForChild("MachineDefinitions"))
+local EconomyRules = require(Shared:WaitForChild("EconomyRules"))
 local EffectsController = require(script.Parent.EffectsController)
 
 local EconomyController = {}
@@ -105,7 +106,7 @@ function EconomyController.start()
 	local dockCorner = Instance.new("UICorner")
 	dockCorner.CornerRadius = UDim.new(0, 16)
 	dockCorner.Parent = rollDock
-	local roll = createButton(rollDock, "Roll", "ROLL FREE")
+	local roll = createButton(rollDock, "Roll", "Roll")
 	roll.Font = Enum.Font.GothamBlack
 	roll.TextSize = 20
 	roll.BackgroundColor3 = COLORS.Accent
@@ -143,7 +144,7 @@ function EconomyController.start()
 	local function updateRollButton()
 		local remaining = math.max(0, cooldownEndAt - os.clock())
 		local ready = state ~= nil and state.DataReady == true
-		roll.Text = if rolling then "ROLLING..." elseif not ready then "FACTORY LOADING" elseif remaining > 0 then string.format("READY IN %.1fs", remaining) else "ROLL FREE"
+		roll.Text = if rolling then "ROLLING..." elseif not ready then "FACTORY LOADING" elseif remaining > 0 then string.format("READY IN %.1fs", remaining) else "Roll"
 		roll.Active = ready and not rolling and remaining <= 0
 		roll.AutoButtonColor = roll.Active
 		roll.BackgroundColor3 = if roll.Active then COLORS.Accent else COLORS.Button
@@ -199,7 +200,10 @@ function EconomyController.start()
 			if quantity > 0 then
 				count += 1
 				local definition = MachineDefinitions.get(machineId)
-				local button = createButton(inventoryList, `Sell_{machineId}`, `Recycle {definition and definition.DisplayName or machineId} ×{quantity}`)
+				local odds = if definition and definition.Rollable then EconomyRules.getMachineOddsLabel(definition.Rarity, MachineDefinitions.getRollPool()) else nil
+				local oddsSuffix = if odds then ` [{odds}]` else ""
+				local machineName = definition and definition.DisplayName or machineId
+				local button = createButton(inventoryList, `Sell_{machineId}`, `Recycle {machineName}{oddsSuffix} ×{quantity}`)
 				button.Size = UDim2.new(1, -6, 0, if compact then 28 else 32)
 				button.TextXAlignment = Enum.TextXAlignment.Left
 				button.Activated:Connect(function()
@@ -235,7 +239,10 @@ function EconomyController.start()
 		local response = invoke(rollMachine)
 		if response and response.Success then
 			local definition = response.LastRoll and MachineDefinitions.get(response.LastRoll)
-			result.Text = `Rolled: {definition and definition.DisplayName or response.LastRoll or "Machine"} ({response.LastRarity or "Unknown"})`
+			local rarity = definition and definition.Rarity or response.LastRarity or "Unknown"
+			local odds = if definition and definition.Rollable then EconomyRules.getMachineOddsLabel(definition.Rarity, MachineDefinitions.getRollPool()) else nil
+			local machineName = definition and definition.DisplayName or response.LastRoll or "Machine"
+			result.Text = if odds then `Rolled: {machineName} ({rarity} · {odds})` else `Rolled: {machineName} ({rarity})`
 			setStatus("Machine added to inventory.", true)
 			refresh(response)
 			EffectsController.play("MachineRolled", { MachineId = response.LastRoll, Rarity = response.LastRarity })
