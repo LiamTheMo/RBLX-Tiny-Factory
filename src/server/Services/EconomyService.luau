@@ -93,28 +93,10 @@ local function getClientState(player: Player): { [string]: any }
 	}
 end
 
-local function chooseRarity(): string?
-	local totalWeight = 0
-	for _, weight in pairs(EconomyConfig.RarityWeights) do
-		totalWeight += weight
-	end
-	return EconomyRules.weightedPick(EconomyConfig.RarityWeights, random:NextNumber(0, totalWeight))
-end
-
-local function chooseMachine(rarity: string?): any?
-	local candidates = {}
-	for _, definition in ipairs(MachineDefinitions.getRollPool()) do
-		if not rarity or definition.Rarity == rarity then
-			table.insert(candidates, definition)
-		end
-	end
-	if #candidates == 0 then
-		candidates = MachineDefinitions.getRollPool()
-	end
-	if #candidates == 0 then
-		return nil
-	end
-	return candidates[random:NextInteger(1, #candidates)]
+local function chooseMachine(): any?
+	local rollPool = MachineDefinitions.getRollPool()
+	local machineId = EconomyRules.pickMachineId(rollPool, random:NextNumber(0, EconomyConfig.MachineRollChanceTotal))
+	return machineId and MachineDefinitions.get(machineId) or nil
 end
 
 local function response(player: Player, success: boolean, reason: string?): { [string]: any }
@@ -147,8 +129,7 @@ local function rollMachine(player: Player)
 		return response(player, false, reason)
 	end
 
-	local rarity = chooseRarity()
-	local definition = chooseMachine(rarity)
+	local definition = chooseMachine()
 	if not definition then
 		return response(player, false, "No rollable machines are configured")
 	end
