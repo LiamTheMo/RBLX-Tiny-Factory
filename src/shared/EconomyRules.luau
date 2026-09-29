@@ -30,6 +30,43 @@ function EconomyRules.canRoll(nextRollAt: number, now: number, inventoryCount: n
 	return true
 end
 
+-- Returns the per-machine chance as a reciprocal (1 in N rolls), rounded to one decimal.
+function EconomyRules.getMachineOddsLabel(rarity: any, rollPool: { [number]: any }): string?
+	if type(rarity) ~= "string" or type(rollPool) ~= "table" then
+		return nil
+	end
+	local weights = EconomyConfig.RarityWeights :: { [string]: number }
+	local rarityWeight = weights[rarity]
+	if not rarityWeight or rarityWeight <= 0 then
+		return nil
+	end
+
+	local machinesInRarity = 0
+	for _, definition in ipairs(rollPool) do
+		if type(definition) == "table" and definition.Rollable == true and definition.Rarity == rarity then
+			machinesInRarity += 1
+		end
+	end
+	if machinesInRarity == 0 then
+		return nil
+	end
+
+	local totalWeight = 0
+	for _, weight in pairs(weights) do
+		if weight > 0 then
+			totalWeight += weight
+		end
+	end
+	if totalWeight <= 0 then
+		return nil
+	end
+
+	local rollsPerMachine = totalWeight * machinesInRarity / rarityWeight
+	local rounded = math.floor(rollsPerMachine * 10 + 0.5) / 10
+	local denominator = if rounded % 1 == 0 then string.format("%.0f", rounded) else string.format("%.1f", rounded)
+	return "1/" .. denominator
+end
+
 function EconomyRules.getCapacityCost(capacity: any): (number?, string?)
 	if type(capacity) ~= "number" or capacity < 1 or capacity % 1 ~= 0 then
 		return nil, "Capacity must be a positive integer"

@@ -6,6 +6,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local MachineDefinitions = require(Shared:WaitForChild("MachineDefinitions"))
+local EconomyRules = require(Shared:WaitForChild("EconomyRules"))
 
 local BuildController = {}
 local started = false
@@ -230,7 +231,10 @@ function BuildController.start()
 			if quantity > 0 then
 				inventoryCount += 1
 				local definition = MachineDefinitions.get(machineId)
-				local button = createButton(inventoryList, `Machine_{machineId}`, `{definition and definition.DisplayName or machineId} ×{quantity}`)
+				local odds = if definition and definition.Rollable then EconomyRules.getMachineOddsLabel(definition.Rarity, MachineDefinitions.getRollPool()) else nil
+				local oddsSuffix = if odds then ` [{odds}]` else ""
+				local machineName = definition and definition.DisplayName or machineId
+				local button = createButton(inventoryList, `Machine_{machineId}`, `{machineName}{oddsSuffix} ×{quantity}`)
 				button.Size = UDim2.new(1, -8, 0, if compact then 30 else 34)
 				button.TextXAlignment = Enum.TextXAlignment.Left
 				button:SetAttribute("Description", definition and definition.Description or "")
@@ -245,7 +249,7 @@ function BuildController.start()
 		if inventoryCount == 0 then
 			local empty = Instance.new("TextLabel")
 			empty.BackgroundTransparency = 1
-			empty.Text = "No rolled machines yet — use ROLL FREE at the bottom."
+			empty.Text = "No rolled machines yet — use Roll at the bottom."
 			empty.TextColor3 = Color3.fromRGB(190, 180, 170)
 			empty.Font = Enum.Font.Gotham
 			empty.TextSize = 11
