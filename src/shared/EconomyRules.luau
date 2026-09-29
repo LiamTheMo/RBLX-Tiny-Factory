@@ -30,22 +30,17 @@ function EconomyRules.canRoll(nextRollAt: number, now: number, inventoryCount: n
 	return true
 end
 
--- Returns the rarity tier for an exact reciprocal chance (for example, 1/12 is Uncommon).
+-- Returns the first configured rarity band whose inclusive odds limit contains this reciprocal chance.
 function EconomyRules.getRarityFromOdds(denominator: any): string?
 	if type(denominator) ~= "number" or denominator < 1 then
 		return nil
 	end
-	local thresholds = EconomyConfig.RarityOddsThresholds
-	if denominator <= thresholds.Common then
-		return "Common"
-	elseif denominator <= thresholds.Uncommon then
-		return "Uncommon"
-	elseif denominator <= thresholds.Rare then
-		return "Rare"
-	elseif denominator <= thresholds.Epic then
-		return "Epic"
+	for _, band in ipairs(EconomyConfig.RarityOddsBands) do
+		if denominator <= band.MaxDenominator then
+			return band.Name
+		end
 	end
-	return "Legendary"
+	return nil
 end
 
 -- RollChance values are percentage weights whose configured total is 100.
