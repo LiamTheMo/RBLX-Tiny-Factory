@@ -91,7 +91,9 @@ Every rollable machine has its own configured roll chance. The server selects fr
 
 Each upper denominator limit is inclusive: for example, 1/100 is Common and odds just rarer than 1/100 are Uncommon. Legendary is the final open-ended band; a future tier can be inserted by adding an ordered rarity-band entry before it.
 
-The ordered rarity bands, denominator limits, and reveal colors are defined once in shared economy configuration. Rollable machines keep distinct weighted chances alongside their definitions; both rarity and the displayed 1/x odds are derived from those weights.
+The ordered rarity bands, denominator limits, and reveal colors are defined once in shared economy configuration. Rollable machines keep distinct weighted chances alongside their definitions; both rarity and the displayed 1/x odds are derived from those weights. The current pastel reveal palette is Common `#D9D9DE`, Uncommon `#BFE8C5`, Rare `#B8D8F0`, Epic `#D7B8E8`, and Legendary `#F0A88F`. Keep these RGB values centralized in the ordered band entries.
+
+Roll animation samples show machine name, derived rarity, and reciprocal odds together on one compact line. A configurable cosmetic cutscene plays when the final machine's odds denominator is greater than 10,000; the exact 1/10,000 boundary does not trigger it. The shared presentation event can be invoked in Studio tests to verify the cutscene before a live machine reaches that rarity.
 
 The configured machine chances total 100%. The current values are starting balance data and should be retuned from playtests. Rarity may influence average expected power, but should not map directly to a fixed multiplier ladder.
 
@@ -104,6 +106,11 @@ Epic = ×100
 Legendary = ×1000
 
 That structure quickly makes earlier machines irrelevant.
+
+
+## 8.1 Rarity Reveal Presentation
+
+Rarity colors live beside their ordered bands in shared economy configuration. The roll animation keeps the current machine name, rarity, and reciprocal odds on one compact line. A temporary ultra-rare cutscene is triggered for denominators greater than 10,000; its duration and threshold are configurable. Studio tests can invoke its presentation event with synthetic odds to verify the UI without changing live machine weights.
 
 ## 9. Inflation Risks
 
