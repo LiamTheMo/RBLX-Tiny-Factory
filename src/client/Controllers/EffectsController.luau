@@ -150,7 +150,7 @@ function EffectsController.start()
 		local pool = MachineDefinitions.getRollPool()
 		local definition = MachineDefinitions.get(payload.MachineId or "")
 		local rarity = payload.Rarity or "Common"
-		local odds = if definition then EconomyRules.getMachineOddsLabel(definition.Rarity, pool) else nil
+		local odds = if definition then EconomyRules.getMachineOddsLabel(definition.Id, pool) else nil
 		task.spawn(function()
 			for index = 1, 16 do
 				if token ~= sequence then
