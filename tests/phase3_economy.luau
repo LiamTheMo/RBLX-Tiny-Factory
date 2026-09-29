@@ -56,6 +56,8 @@ for _, definition in ipairs(rollPool) do
 	expect(odds ~= nil and string.sub(odds, 1, 2) == "1/", "every rollable machine must have an odds label")
 	expect(definition.Rarity == EconomyRules.getRarityFromOdds(EconomyConfig.MachineRollChanceTotal / chance), "each machine rarity must follow its weighted chance")
 end
+local goldenizer = assert(MachineDefinitions.get("Goldenizer"))
+expect(goldenizer.Rarity == "Uncommon", "a machine at the inclusive 1/500 boundary should be Uncommon")
 local definitionsValid, definitionsError = MachineDefinitions.validate()
 expect(definitionsValid, definitionsError or "per-machine chance definitions should validate")
 local samplePool = {
