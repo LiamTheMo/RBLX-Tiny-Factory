@@ -3,7 +3,7 @@
 return {
 	RollCooldownSeconds = 3,
 	MaxInventoryMachines = 200,
-	CapacityCosts = { 25 },
+	CapacityCosts = { 25, 100 },
 	MachineRollChanceTotal = 100,
 	MaxLuckMultiplier = 2,
 	MaxSaleValueMultiplier = 10,
