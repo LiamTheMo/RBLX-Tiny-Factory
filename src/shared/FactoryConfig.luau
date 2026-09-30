@@ -5,11 +5,11 @@
 -- remain data-driven as later phases add configuration services.
 local FactoryConfig = {
 	BuildVersion = "v1.00",
-	SchemaVersion = 2,
+	SchemaVersion = 3,
 	MaxActiveItems = 24,
 	MaxItemValue = 1_000_000,
 	SpawnIntervalSeconds = 1,
-	TravelTimePerSlotSeconds = 0.25,
+	TravelTimePerSlotSeconds = 1.15,
 	MaxCatchUpSpawnsPerStep = 256,
 	MaxFactoryCapacity = 2,
 	DefaultRoute = { "BasicDropper", "ValueMultiplier", "Seller" },

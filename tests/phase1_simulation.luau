@@ -1,6 +1,7 @@
 --!strict
 
 local FactorySimulation = require("../src/shared/FactorySimulation")
+local FactoryConfig = require("../src/shared/FactoryConfig")
 local MachineDefinitions = require("../src/shared/MachineDefinitions")
 
 local function expect(condition: boolean, message: string)
@@ -49,7 +50,7 @@ expect(not invalidType, "non-numeric timing must be rejected")
 
 local firstFactory = FactorySimulation.new()
 local secondFactory = FactorySimulation.new()
-firstFactory:step(2)
+firstFactory:step(FactoryConfig.TravelTimePerSlotSeconds * 3 + 1)
 secondFactory:step(0.5)
 local firstSnapshot = firstFactory:getSnapshot()
 local secondSnapshot = secondFactory:getSnapshot()

@@ -7,7 +7,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local BoosterConfig = require(Shared:WaitForChild("BoosterConfig"))
 local BoosterRules = require(Shared:WaitForChild("BoosterRules"))
 local FactoryService = require(script.Parent.FactoryService)
-local EconomyService = require(script.Parent.EconomyService)
+local BoosterService = require(script.Parent.BoosterService)
 local EffectService = require(script.Parent.EffectService)
 local AnalyticsService = require(script.Parent.AnalyticsService)
 
@@ -34,22 +34,6 @@ local function getActiveDropCount(player: Player): number
 	return #drops
 end
 
-local function grantBooster(player: Player, factory: any, booster: any): (boolean, { [string]: any }?)
-	local effect = booster.Effect
-	local payload: { [string]: any } = { BoosterId = booster.Id, DisplayName = booster.DisplayName }
-	if effect.Kind == "Coins" then
-		if not factory.simulation:grantCoins(effect.Amount) then return false, nil end
-		payload.Coins = effect.Amount
-	elseif effect.Kind == "Luck" then
-		if not EconomyService.grantLuckBoost(player, effect.Multiplier, effect.DurationSeconds) then return false, nil end
-		payload.Multiplier = effect.Multiplier
-		payload.DurationSeconds = effect.DurationSeconds
-	else
-		return false, nil
-	end
-	return true, payload
-end
-
 function LootService.claim(player: Player, part: BasePart): boolean
 	local factory = FactoryService.getState(player)
 	if not factory or player:GetAttribute("FactoryDataReady") ~= true or not part:IsA("BasePart")
@@ -59,15 +43,14 @@ function LootService.claim(player: Player, part: BasePart): boolean
 	local booster = BoosterRules.get(part:GetAttribute("BoosterId"))
 	if not booster then return false end
 	part:SetAttribute("Claimed", true)
-	local granted, payload = grantBooster(player, factory, booster)
-	if not granted or not payload then
+	local granted = BoosterService.collect(player, booster.Id)
+	if not granted then
 		part:SetAttribute("Claimed", false)
 		return false
 	end
 	part:Destroy()
 	AnalyticsService.record(player, "LootCollected")
-	EffectService.fire(player, "InventoryChanged")
-	EffectService.fire(player, "LootClaimed", payload)
+	EffectService.fire(player, "LootClaimed", { BoosterId = booster.Id, DisplayName = booster.DisplayName })
 	return true
 end
 
