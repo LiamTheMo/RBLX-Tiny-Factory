@@ -14,15 +14,30 @@ else
 	MachineDefinitions = require("./MachineDefinitions")
 end
 
+local SaleValueRules
+if script ~= nil then
+	SaleValueRules = require(script.Parent.SaleValueRules)
+else
+	SaleValueRules = require("./SaleValueRules")
+end
+
+type ValueModifierLayer = {
+	AdditiveBonus: number?,
+	Multiplier: number?,
+}
+
 type Item = {
 	Id: number,
 	Value: number,
 	SlotIndex: number,
 	TimeRemaining: number,
 	SourceMachineId: string,
+	TypeId: string,
+	TypeModifiers: ValueModifierLayer,
 	VisualState: string,
 	SizeScale: number,
 	TravelScale: number,
+	ReadyForSale: boolean,
 }
 
 export type SimulationConfig = {
@@ -142,9 +157,12 @@ function FactorySimulation:_spawnItem()
 		SlotIndex = 1,
 		TimeRemaining = self.travelTimePerSlotSeconds,
 		SourceMachineId = producer.Id,
+		TypeId = producer.OutputType or "Standard",
+		TypeModifiers = table.clone(producer.TypeModifiers or {}),
 		VisualState = "Base",
 		SizeScale = 1,
 		TravelScale = 1,
+		ReadyForSale = false,
 	})
 end
 
@@ -174,9 +192,12 @@ function FactorySimulation:_processItemAtSlot(item: Item): boolean
 					SlotIndex = item.SlotIndex + 1,
 					TimeRemaining = self.travelTimePerSlotSeconds,
 					SourceMachineId = item.SourceMachineId,
+					TypeId = item.TypeId,
+					TypeModifiers = table.clone(item.TypeModifiers),
 					VisualState = item.VisualState,
 					SizeScale = item.SizeScale,
 					TravelScale = item.TravelScale,
+					ReadyForSale = false,
 				})
 			end
 		elseif behavior == "Goldenize" then
@@ -188,20 +209,31 @@ function FactorySimulation:_processItemAtSlot(item: Item): boolean
 		end
 		self.processedItems += 1
 	elseif definition.Category == "Seller" then
-		self.coins += item.Value
-		self.totalValueSold += item.Value
-		self.soldItems += 1
-		return true
+		item.ReadyForSale = true
+		item.TimeRemaining = 0
 	end
 
 	return false
 end
 
 function FactorySimulation:_advanceItem(item: Item, deltaTime: number): boolean
+	if item.ReadyForSale then
+		return false
+	end
+	local currentDefinition = MachineDefinitions.get(self.route[item.SlotIndex])
+	if currentDefinition and currentDefinition.Category == "Seller" then
+		item.ReadyForSale = true
+		item.TimeRemaining = 0
+		return false
+	end
+
 	item.TimeRemaining -= deltaTime
 	while item.TimeRemaining <= 1e-9 do
 		if self:_processItemAtSlot(item) then
 			return true
+		end
+		if item.ReadyForSale then
+			return false
 		end
 
 		item.SlotIndex += 1
@@ -210,11 +242,56 @@ function FactorySimulation:_advanceItem(item: Item, deltaTime: number): boolean
 			-- definition from retaining an item forever if the route changes later.
 			return true
 		end
+		local nextDefinition = MachineDefinitions.get(self.route[item.SlotIndex])
+		if nextDefinition and nextDefinition.Category == "Seller" then
+			item.ReadyForSale = true
+			item.TimeRemaining = 0
+			return false
+		end
 
 		item.TimeRemaining += self.travelTimePerSlotSeconds * item.TravelScale
 		item.TravelScale = 1
 	end
 	return false
+end
+
+function FactorySimulation:sellItem(itemId: any, buffModifiers: ValueModifierLayer?): (boolean, number?)
+	if type(itemId) ~= "number" or itemId % 1 ~= 0 or itemId < 1 then
+		return false, nil
+	end
+
+	local seller = MachineDefinitions.get(self.route[#self.route])
+	if not seller or seller.Category ~= "Seller" then
+		return false, nil
+	end
+
+	for index, item in ipairs(self.activeItems) do
+		if item.Id == itemId then
+			if not item.ReadyForSale then
+				return false, nil
+			end
+
+			local saleValue = SaleValueRules.calculate(
+				item.Value,
+				item.TypeModifiers,
+				buffModifiers,
+				seller.SaleModifiers,
+				self.maxItemValue
+			)
+			if not saleValue then
+				return false, nil
+			end
+
+			local credited = math.min(saleValue, math.max(0, self.maxItemValue - self.coins))
+			table.remove(self.activeItems, index)
+			self.coins += credited
+			self.totalValueSold += credited
+			self.soldItems += 1
+			return true, credited
+		end
+	end
+
+	return false, nil
 end
 
 function FactorySimulation:step(deltaTime: number)
@@ -305,9 +382,12 @@ function FactorySimulation:getActiveItemsForDebug(): { Item }
 			SlotIndex = item.SlotIndex,
 			TimeRemaining = item.TimeRemaining,
 			SourceMachineId = item.SourceMachineId,
+			TypeId = item.TypeId,
+			TypeModifiers = table.clone(item.TypeModifiers),
 			VisualState = item.VisualState,
 			SizeScale = item.SizeScale,
 			TravelScale = item.TravelScale,
+			ReadyForSale = item.ReadyForSale,
 		}
 	end
 	return result

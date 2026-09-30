@@ -67,6 +67,26 @@ local function colorFromRgb(channels: { number }): Color3
 	return Color3.fromRGB(channels[1], channels[2], channels[3])
 end
 
+local function overlapsHitbox(hitbox: BasePart, item: BasePart): boolean
+	local localPosition = hitbox.CFrame:PointToObjectSpace(item.Position)
+	local combinedHalfSize = (hitbox.Size + item.Size) / 2
+	return math.abs(localPosition.X) <= combinedHalfSize.X
+		and math.abs(localPosition.Y) <= combinedHalfSize.Y
+		and math.abs(localPosition.Z) <= combinedHalfSize.Z
+end
+
+local function getSaleBuffModifiers(player: Player): { [string]: number? }
+	-- EconomyService owns these server-side attributes. Missing attributes remain neutral.
+	local expiresAt = player:GetAttribute("FactorySaleValueExpiresAt")
+	if type(expiresAt) ~= "number" or expiresAt <= workspace:GetServerTimeNow() then
+		return { AdditiveBonus = 0, Multiplier = 1 }
+	end
+	return {
+		AdditiveBonus = player:GetAttribute("FactorySaleValueAdditiveBonus"),
+		Multiplier = player:GetAttribute("FactorySaleValueMultiplier"),
+	}
+end
+
 local function createConveyor(plot: Folder, origin: Vector3): Folder
 	local conveyorConfig = MachineVisualConfig.Conveyor
 	local slotPitch = MachineVisualConfig.SlotPitch
@@ -247,6 +267,7 @@ local function refreshMachineVisuals(factory: any)
 	machineFolder = Instance.new("Folder")
 	machineFolder.Name = "Machines"
 	machineFolder.Parent = factory.plot
+	factory.sellerHitbox = nil
 
 	for slotIndex = 1, FactoryLayout.EditableSlotCount do
 		local belt = factory.conveyor:FindFirstChild(string.format("Conveyor_%d", slotIndex))
@@ -292,6 +313,13 @@ local function refreshMachineVisuals(factory: any)
 				elseif profile.Style == "Seller" then
 					makePart("SellerFoot", Vector3.new(2.8, 0.3, 2.4), Vector3.new(0, 0.32, 0), accentColor)
 					makePart("SellerTray", Vector3.new(2.4, 0.25, 2.1), Vector3.new(0, 0.62, 0), accentColor)
+					local sellerHitbox = makePart("SellerHitbox", Vector3.new(2.4, 1.6, 2.1), Vector3.new(0, 0.9, 0), primaryColor)
+					sellerHitbox.Transparency = 1
+					sellerHitbox.CanCollide = false
+					sellerHitbox.CanTouch = false
+					sellerHitbox.CanQuery = false
+					sellerHitbox.CastShadow = false
+					factory.sellerHitbox = sellerHitbox
 					clickPart = makePart("SellerHousing", Vector3.new(1.8, 1.6, 1.7), Vector3.new(0, 1.62, 0), primaryColor)
 				else
 					makePart("ProcessorFoot", Vector3.new(2.8, 0.3, 2.4), Vector3.new(0, 0.32, 0), accentColor)
@@ -305,26 +333,6 @@ local function refreshMachineVisuals(factory: any)
 				clickPart:SetAttribute("Rarity", definition.Rarity)
 				clickPart:SetAttribute("Behavior", definition.Behavior or definition.Category)
 
-				local labelGui = Instance.new("BillboardGui")
-				labelGui.Name = "MachineLabel"
-				labelGui.Adornee = clickPart
-				labelGui.AlwaysOnTop = true
-				labelGui.MaxDistance = 80
-				labelGui.Size = UDim2.fromOffset(150, 42)
-				labelGui.StudsOffset = Vector3.new(0, 1.7, 0)
-				labelGui.Parent = clickPart
-
-				local label = Instance.new("TextLabel")
-				label.BackgroundColor3 = Color3.fromRGB(28, 24, 21)
-				label.BackgroundTransparency = 0.2
-				label.BorderSizePixel = 0
-				label.Size = UDim2.fromScale(1, 1)
-				label.Text = string.format("%s\n%s", definition.DisplayName, definition.Rarity)
-				label.TextColor3 = Color3.fromRGB(255, 255, 255)
-				label.TextSize = 11
-				label.TextWrapped = true
-				label.Font = Enum.Font.GothamBold
-				label.Parent = labelGui
 			end
 		end
 	end
@@ -343,7 +351,7 @@ local function getPhysicalSlotForRouteIndex(layout: FactoryLayout.Layout, routeI
 	return 1
 end
 
-local function updateVisualItems(factory: any)
+local function updateVisualItems(player: Player, factory: any)
 	local activeItems = factory.simulation:getActiveItemsForDebug()
 	local activeById = {}
 	local visualConfig = MachineVisualConfig.ConveyorItem
@@ -367,7 +375,7 @@ local function updateVisualItems(factory: any)
 		local segmentProgress = 1 - math.clamp(item.TimeRemaining / FactoryConfig.TravelTimePerSlotSeconds, 0, 1)
 		local x = (physicalSlotIndex - 1) * MachineVisualConfig.SlotPitch
 		local nextPhysicalSlotIndex = getPhysicalSlotForRouteIndex(factory.layout, item.SlotIndex + 1)
-		local travelDistance = if nextPhysicalSlotIndex > physicalSlotIndex
+		local travelDistance = if item.ReadyForSale then 0 elseif nextPhysicalSlotIndex > physicalSlotIndex
 			then (nextPhysicalSlotIndex - physicalSlotIndex) * MachineVisualConfig.SlotPitch
 			else MachineVisualConfig.SlotPitch
 		local conveyorConfig = MachineVisualConfig.Conveyor
@@ -388,6 +396,14 @@ local function updateVisualItems(factory: any)
 		end
 		visual.Position = factory.origin + Vector3.new(x, y, 0)
 		visual:SetAttribute("ItemValue", item.Value)
+
+		local sellerHitbox = factory.sellerHitbox
+		if item.ReadyForSale and sellerHitbox and overlapsHitbox(sellerHitbox, visual) then
+			local sold = factory.simulation:sellItem(item.Id, getSaleBuffModifiers(player))
+			if sold then
+				activeById[item.Id] = nil
+			end
+		end
 	end
 
 	for itemId, visual in pairs(factory.visualItems) do
@@ -725,6 +741,7 @@ function FactoryService.start()
 			end
 			local before = factory.simulation:getSnapshot()
 			factory.simulation:step(deltaTime)
+			updateVisualItems(player, factory)
 			local after = factory.simulation:getSnapshot()
 			if not factory.announcedSpawn and after.ProducedItems > before.ProducedItems then
 				factory.announcedSpawn = true
@@ -734,7 +751,6 @@ function FactoryService.start()
 				factory.announcedSale = true
 				EffectService.fire(player, "FirstItemSold", { Coins = after.Coins })
 			end
-			updateVisualItems(factory)
 			if attributeUpdateAccumulator >= 0.25 then
 				updateDebugAttributes(player, factory)
 			end

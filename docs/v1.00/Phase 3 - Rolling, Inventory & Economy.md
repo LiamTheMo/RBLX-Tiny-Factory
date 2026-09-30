@@ -12,6 +12,7 @@ Implement the acquisition and economy loop that gives players new factory choice
 - Clicking a conveyor area opens a contextual machine picker with valid placement, replacement, move, and return actions.
 - Players can recycle an available machine from the full inventory view.
 - Coins earned from production and public pickups buy capacity upgrades.
+- A cube earns Coins only when it reaches the Seller hitbox; the server settles its processed value with type, active sale-buff, and Seller modifiers.
 
 ## Systems
 

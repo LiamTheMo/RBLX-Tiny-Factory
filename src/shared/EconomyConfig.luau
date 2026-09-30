@@ -6,6 +6,7 @@ return {
 	CapacityCosts = { 25 },
 	MachineRollChanceTotal = 100,
 	MaxLuckMultiplier = 2,
+	MaxSaleValueMultiplier = 10,
 	UltraRareCutscene = {
 		MinimumOddsDenominator = 10000,
 		DurationSeconds = 2.4,

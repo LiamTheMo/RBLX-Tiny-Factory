@@ -108,13 +108,15 @@ resultEvent.OnServerEvent:Connect(function(player, success, message)
 	local hasDropper = false
 	if machineFolder then
 		for _, machineModel in ipairs(machineFolder:GetChildren()) do
+			assert(not machineModel:FindFirstChild("MachineLabel", true), "placed-machine holograms should be hidden")
 			if machineModel:FindFirstChild("DropperHousing", true) then
 				hasDropper = true
-				break
 			end
 		end
 	end
 	assert(hasDropper, "temporary dropper proof-of-concept model is missing")
+	local sellerHitbox = factory.sellerHitbox
+	assert(sellerHitbox and sellerHitbox.Name == "SellerHitbox" and sellerHitbox.Transparency == 1 and not sellerHitbox.CanCollide, "seller hitbox should be invisible and non-colliding")
 	local loot = testDrops[player]
 	assert(loot and loot:GetAttribute("Claimed") == true and loot.Parent == nil, "running over the world booster did not claim it")
 	assert(loot:GetAttribute("Landed") == true and loot.Position.Y >= 0.5 and loot.Transparency == 0, "booster should fade in and land above the baseplate")
@@ -202,7 +204,7 @@ local success, message = pcall(function()
 	assert(overlay.Visible, "roll cutscene did not open")
 	task.wait(0.12)
 	local rollingText = overlay.RevealCard.Text
-	assert(overlay.BackgroundTransparency == 1, "normal roll animation should leave the world background clear")
+	assert(overlay.BackgroundColor3 == Color3.fromRGB(126, 128, 132) and overlay.BackgroundTransparency == 0.55, "normal roll should restore the translucent gray screen overlay")
 	assert(overlay.Heading.BackgroundTransparency == 1, "roll heading should be text without a backing fill")
 	assert(overlay.RevealCard.BackgroundTransparency == 1, "rolling result should be text without a card fill")
 	assert(not overlay.RevealCard:FindFirstChildOfClass("UIStroke"), "rolling result should not have a box outline")
@@ -225,7 +227,7 @@ local success, message = pcall(function()
 	effects.play("UltraRareRollCutscene", { MachineName = "Test Machine", Rarity = "Legendary", Odds = "1/10001" })
 	task.wait(0.1)
 	assert(overlay.Visible and overlay.Heading.Text == "ULTRA RARE MACHINE!", "ultra-rare cutscene test event did not open")
-	assert(overlay.BackgroundTransparency == 1, "ultra-rare cutscene should keep the world background transparent")
+	assert(overlay.BackgroundTransparency == 0.55, "ultra-rare roll reveal should keep the translucent gray overlay")
 	assert(overlay.RevealCard.BackgroundTransparency == 1, "ultra-rare reveal should keep its text background clear")
 	assert(overlay.RevealCard.Text:find("1/10001", 1, true), "ultra-rare cutscene omitted test odds")
 	task.wait(0.15)
