@@ -71,6 +71,9 @@ expect(not failedSave and saveError == "store", "store failures should surface t
 fakeStore.fail = false
 local saved = PersistenceSession.save(fakeStore, "user", "session-b", safe, false, 503)
 expect(saved and fakeStore.value.Data.Coins == safe.Coins, "current owner should persist sanitized state")
+fakeStore.value._SessionId = nil
+local ownerlessSave, ownerlessError = PersistenceSession.save(fakeStore, "user", "session-b", safe, false, 504)
+expect(not ownerlessSave and ownerlessError == "conflict", "an unowned record must not be overwritten by a stale session")
 expect(safe.Statistics.TooLarge == 1_000_000, "statistics must be capped")
 expect(safe.Analytics.MachinePlaced == 3, "valid analytics counters should survive sanitization")
 expect(safe.Analytics["invalid-event"] == nil, "analytics event names must be schema-safe")
