@@ -14,6 +14,13 @@ else
 	MachineDefinitions = require("./MachineDefinitions")
 end
 
+local NumberFormatter
+if script ~= nil then
+	NumberFormatter = require(script.Parent.NumberFormatter)
+else
+	NumberFormatter = require("./NumberFormatter")
+end
+
 local SaleValueRules
 if script ~= nil then
 	SaleValueRules = require(script.Parent.SaleValueRules)
@@ -29,6 +36,8 @@ type ValueModifierLayer = {
 type Item = {
 	Id: number,
 	Value: number,
+	BaseValue: number,
+	ModifierLabels: { string },
 	SlotIndex: number,
 	TimeRemaining: number,
 	SourceMachineId: string,
@@ -43,6 +52,7 @@ type Item = {
 export type SimulationConfig = {
 	MaxActiveItems: number?,
 	MaxItemValue: number?,
+	MaxCoins: number?,
 	SpawnIntervalSeconds: number?,
 	TravelTimePerSlotSeconds: number?,
 	MaxCatchUpSpawnsPerStep: number?,
@@ -87,6 +97,7 @@ function FactorySimulation.new(config: SimulationConfig?): any
 	local self = setmetatable({
 		maxActiveItems = provided.MaxActiveItems or FactoryConfig.MaxActiveItems,
 		maxItemValue = provided.MaxItemValue or FactoryConfig.MaxItemValue,
+		maxCoins = provided.MaxCoins or FactoryConfig.MaxCoins,
 		spawnIntervalSeconds = provided.SpawnIntervalSeconds or FactoryConfig.SpawnIntervalSeconds,
 		travelTimePerSlotSeconds = provided.TravelTimePerSlotSeconds or FactoryConfig.TravelTimePerSlotSeconds,
 		maxCatchUpSpawnsPerStep = provided.MaxCatchUpSpawnsPerStep or FactoryConfig.MaxCatchUpSpawnsPerStep,
@@ -154,6 +165,8 @@ function FactorySimulation:_spawnItem()
 	table.insert(self.activeItems, {
 		Id = self.nextItemId,
 		Value = math.min(producer.OutputValue or 1, self.maxItemValue),
+		BaseValue = math.min(producer.OutputValue or 1, self.maxItemValue),
+		ModifierLabels = {},
 		SlotIndex = 1,
 		TimeRemaining = self.travelTimePerSlotSeconds,
 		SourceMachineId = producer.Id,
@@ -175,6 +188,19 @@ function FactorySimulation:_processItemAtSlot(item: Item): boolean
 
 	if definition.Category == "Processor" then
 		local behavior = definition.Behavior or "MultiplyValue"
+		local label = definition.DisplayName
+		if behavior == "MultiplyValue" or behavior == "Goldenize" then
+			label ..= " ×" .. NumberFormatter.format(definition.Multiplier or 1)
+		elseif behavior == "ScaleVisual" then
+			label ..= " · size ×" .. NumberFormatter.format(definition.SizeScale or 1)
+		elseif behavior == "AdjustThroughput" then
+			label ..= " · speed ×" .. NumberFormatter.format(1 / (definition.TravelScale or 1))
+		elseif behavior == "RandomMultiplier" then
+			label ..= " ×" .. NumberFormatter.format(if item.Id % 2 == 0 then 3 else 0.5)
+		end
+		if #item.ModifierLabels < FactoryConfig.MaxItemModifierLabels then
+			table.insert(item.ModifierLabels, label)
+		end
 		if behavior == "MultiplyValue" then
 			item.Value = math.min(item.Value * (definition.Multiplier or 1), self.maxItemValue)
 		elseif behavior == "ScaleVisual" then
@@ -189,6 +215,8 @@ function FactorySimulation:_processItemAtSlot(item: Item): boolean
 				table.insert(self.pendingItems, {
 					Id = self.nextItemId,
 					Value = item.Value,
+					BaseValue = item.BaseValue,
+					ModifierLabels = table.clone(item.ModifierLabels),
 					SlotIndex = item.SlotIndex + 1,
 					TimeRemaining = self.travelTimePerSlotSeconds,
 					SourceMachineId = item.SourceMachineId,
@@ -282,10 +310,10 @@ function FactorySimulation:sellItem(itemId: any, buffModifiers: ValueModifierLay
 				return false, nil
 			end
 
-			local credited = math.min(saleValue, math.max(0, self.maxItemValue - self.coins))
+			local credited = math.min(saleValue, math.max(0, self.maxCoins - self.coins))
 			table.remove(self.activeItems, index)
 			self.coins += credited
-			self.totalValueSold += credited
+			self.totalValueSold = math.min(self.totalValueSold + credited, self.maxCoins)
 			self.soldItems += 1
 			return true, credited
 		end
@@ -361,7 +389,7 @@ function FactorySimulation:grantCoins(amount: number): boolean
 	if type(amount) ~= "number" or amount ~= amount or amount < 0 or amount == math.huge then
 		return false
 	end
-	self.coins = math.min(self.coins + amount, self.maxItemValue)
+	self.coins = math.min(self.coins + amount, self.maxCoins)
 	return true
 end
 
@@ -369,7 +397,7 @@ function FactorySimulation:setCoins(amount: any): boolean
 	if type(amount) ~= "number" or amount ~= amount or amount < 0 or amount == math.huge then
 		return false
 	end
-	self.coins = math.min(amount, self.maxItemValue)
+	self.coins = math.min(amount, self.maxCoins)
 	return true
 end
 
@@ -379,6 +407,8 @@ function FactorySimulation:getActiveItemsForDebug(): { Item }
 		result[index] = {
 			Id = item.Id,
 			Value = item.Value,
+			BaseValue = item.BaseValue,
+			ModifierLabels = table.clone(item.ModifierLabels),
 			SlotIndex = item.SlotIndex,
 			TimeRemaining = item.TimeRemaining,
 			SourceMachineId = item.SourceMachineId,
@@ -397,6 +427,7 @@ function FactorySimulation.validateConfiguration(config: SimulationConfig?): (bo
 	local provided = config or {}
 	local maxActiveItems = provided.MaxActiveItems or FactoryConfig.MaxActiveItems
 	local maxItemValue = provided.MaxItemValue or FactoryConfig.MaxItemValue
+	local maxCoins = provided.MaxCoins or FactoryConfig.MaxCoins
 	local spawnInterval = provided.SpawnIntervalSeconds or FactoryConfig.SpawnIntervalSeconds
 	local travelTime = provided.TravelTimePerSlotSeconds or FactoryConfig.TravelTimePerSlotSeconds
 	local maxCatchUp = provided.MaxCatchUpSpawnsPerStep or FactoryConfig.MaxCatchUpSpawnsPerStep
@@ -406,6 +437,9 @@ function FactorySimulation.validateConfiguration(config: SimulationConfig?): (bo
 	end
 	if not isFinitePositive(maxItemValue) then
 		return false, "MaxItemValue must be finite and positive"
+	end
+	if not isFinitePositive(maxCoins) or maxCoins % 1 ~= 0 or maxCoins > FactoryConfig.MaxCoins then
+		return false, "MaxCoins must be a positive safe integer"
 	end
 	if not isFinitePositive(spawnInterval) or not isFinitePositive(travelTime) then
 		return false, "Timing values must be finite and positive"

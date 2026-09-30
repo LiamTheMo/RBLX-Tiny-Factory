@@ -183,3 +183,17 @@ These are **test targets, not success guarantees**:
 - players should have meaningful reasons to change layouts throughout the early session
 
 All exact tuning must be data-driven.
+
+## Production feedback and numeric presentation
+
+The server publishes the wallet immediately when a Seller settles a cube. The economy panel listens to `FactoryCoins` changes and `ItemSold` confirmations, so production income is visible without rolling or opening inventory. Sale popups are cosmetic client effects; they never grant currency.
+
+`MaxItemValue` caps each cube independently. `MaxCoins` caps the wallet at the largest exact integer representable by a double, and save sanitization uses that wallet limit. Display formatting never changes stored currency or increases the numeric precision of gameplay calculations.
+
+Shared `NumberFormatter.format(number)` renders exactly two decimals, with 102 groups through centillion: k, m, b, t, qd, qt, sx, sp, oc, no, dc, and compound suffixes. It promotes suffixes after rounding, handles signs, and avoids negative zero. `NumberFormatter.integer(number)` keeps small counters as integers and abbreviates large counters with two decimals. Use these helpers for currencies, multipliers, popups, and future high-number UI.
+
+Hovered cubes display their current full sale value, output type, effective upgrade multiplier, sale multiplier, upgrade labels, and non-neutral type/buff/Seller layers. The preview changes as the cube is upgraded or buffs expire; subsequent upgrades can change the final payout. Touch devices can tap a cube to inspect it briefly.
+
+Every current machine has a configured palette, symbol on its housing, and small silhouette details in `MachineVisualConfig.Variants`. `MachineModelBuilder` shares the base shells and builds these details, keeping the section holograms separate.
+
+Manual validation on the deployed place: verify live Coins growth without inventory actions, hover/tap a normal and upgraded cube, confirm rising sale text at the open Seller intake, compare every machine variant, and test readability/performance on desktop and mobile.

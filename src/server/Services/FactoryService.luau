@@ -8,6 +8,10 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local FactoryConfig = require(Shared:WaitForChild("FactoryConfig"))
 local MachineVisualConfig = require(Shared:WaitForChild("MachineVisualConfig"))
 local FactoryLayout = require(Shared:WaitForChild("FactoryLayout"))
+local FactoryItemGeometry = require(Shared:WaitForChild("FactoryItemGeometry"))
+local SaleValueRules = require(Shared:WaitForChild("SaleValueRules"))
+local NumberFormatter = require(Shared:WaitForChild("NumberFormatter"))
+local MachineModelBuilder = require(script.Parent.MachineModelBuilder)
 local FactorySimulation = require(Shared:WaitForChild("FactorySimulation"))
 local MachineDefinitions = require(Shared:WaitForChild("MachineDefinitions"))
 local PlacementRules = require(Shared:WaitForChild("PlacementRules"))
@@ -69,10 +73,7 @@ end
 
 local function overlapsHitbox(hitbox: BasePart, item: BasePart): boolean
 	local localPosition = hitbox.CFrame:PointToObjectSpace(item.Position)
-	local combinedHalfSize = (hitbox.Size + item.Size) / 2
-	return math.abs(localPosition.X) <= combinedHalfSize.X
-		and math.abs(localPosition.Y) <= combinedHalfSize.Y
-		and math.abs(localPosition.Z) <= combinedHalfSize.Z
+	return FactoryItemGeometry.overlapsBox(localPosition.X, localPosition.Y, localPosition.Z, hitbox.Size.X, hitbox.Size.Y, hitbox.Size.Z, item.Size.X)
 end
 
 local function getSaleBuffModifiers(player: Player): { [string]: number? }
@@ -282,51 +283,11 @@ local function refreshMachineVisuals(factory: any)
 		if machineId then
 			local definition = MachineDefinitions.get(machineId)
 			if definition then
-				local profileKey = definition.VisualStyle or (definition.Category == "Producer" and "Dropper") or definition.Category
-				local profile = MachineVisualConfig.Profiles[profileKey] or MachineVisualConfig.Profiles.Processor
-				local primaryColor = colorFromRgb(profile.PrimaryColor)
-				local accentColor = colorFromRgb(profile.AccentColor)
-				local machineLift = MachineVisualConfig.Conveyor.DeckCenterY + MachineVisualConfig.Conveyor.Elevation + MachineVisualConfig.Conveyor.DeckThickness / 2 - MachineVisualConfig.MachineProfileBaseDeckTop
-				local basePosition = factory.origin + Vector3.new((slotIndex - 1) * MachineVisualConfig.SlotPitch, machineLift, 0)
-				local model = Instance.new("Model")
-				model.Name = string.format("Slot_%d_%s", slotIndex, machineId)
-				model.Parent = machineFolder
-
-				local function makePart(name: string, size: Vector3, offset: Vector3, color: Color3): Part
-					local part = createPart(model, name, size, basePosition + offset, color)
-					part.Material = Enum.Material.SmoothPlastic
-					return part
+				local model, clickPart, sellerHitbox = MachineModelBuilder.build(machineFolder, factory.origin, slotIndex, definition)
+				if sellerHitbox then factory.sellerHitbox = sellerHitbox end
+				for _, part in ipairs(model:GetChildren()) do
+					if part:IsA("BasePart") and part ~= sellerHitbox then addSlotClickDetector(part, slotIndex) end
 				end
-
-				local clickPart: Part
-				if profile.Style == "Dropper" then
-					makePart("DropperFoot", Vector3.new(2.8, 0.3, 2.4), Vector3.new(0, 0.32, 0), accentColor)
-					makePart("DropperSupportLeft", Vector3.new(0.3, 2.2, 0.3), Vector3.new(0, 1.4, -0.86), accentColor)
-					makePart("DropperSupportRight", Vector3.new(0.3, 2.2, 0.3), Vector3.new(0, 1.4, 0.86), accentColor)
-					makePart("DropperHeadLeft", Vector3.new(0.62, 1.2, 1.8), Vector3.new(-0.78, 2.55, 0), primaryColor)
-					makePart("DropperHeadRight", Vector3.new(0.62, 1.2, 1.8), Vector3.new(0.78, 2.55, 0), primaryColor)
-					makePart("DropperNozzleLeft", Vector3.new(0.18, 0.5, 0.18), Vector3.new(-0.48, 1.65, 0), accentColor)
-					makePart("DropperNozzleRight", Vector3.new(0.18, 0.5, 0.18), Vector3.new(0.48, 1.65, 0), accentColor)
-					makePart("DropperNozzleNear", Vector3.new(0.18, 0.5, 0.18), Vector3.new(0, 1.65, -0.48), accentColor)
-					makePart("DropperNozzleFar", Vector3.new(0.18, 0.5, 0.18), Vector3.new(0, 1.65, 0.48), accentColor)
-					clickPart = makePart("DropperHousing", Vector3.new(2.2, 0.35, 2.0), Vector3.new(0, 3.25, 0), primaryColor)
-				elseif profile.Style == "Seller" then
-					makePart("SellerFoot", Vector3.new(2.8, 0.3, 2.4), Vector3.new(0, 0.32, 0), accentColor)
-					makePart("SellerTray", Vector3.new(2.4, 0.25, 2.1), Vector3.new(0, 0.62, 0), accentColor)
-					local sellerHitbox = makePart("SellerHitbox", Vector3.new(2.4, 1.6, 2.1), Vector3.new(0, 0.9, 0), primaryColor)
-					sellerHitbox.Transparency = 1
-					sellerHitbox.CanCollide = false
-					sellerHitbox.CanTouch = false
-					sellerHitbox.CanQuery = false
-					sellerHitbox.CastShadow = false
-					factory.sellerHitbox = sellerHitbox
-					clickPart = makePart("SellerHousing", Vector3.new(1.8, 1.6, 1.7), Vector3.new(0, 1.62, 0), primaryColor)
-				else
-					makePart("ProcessorFoot", Vector3.new(2.8, 0.3, 2.4), Vector3.new(0, 0.32, 0), accentColor)
-					clickPart = makePart("ProcessorHousing", Vector3.new(2.1, 1.5, 1.9), Vector3.new(0, 1.25, 0), primaryColor)
-				end
-
-				addSlotClickDetector(clickPart, slotIndex)
 				clickPart:SetAttribute("MachineId", definition.Id)
 				clickPart:SetAttribute("DisplayName", definition.DisplayName)
 				clickPart:SetAttribute("Description", definition.Description)
@@ -338,28 +299,26 @@ local function refreshMachineVisuals(factory: any)
 	end
 end
 
-local function getPhysicalSlotForRouteIndex(layout: FactoryLayout.Layout, routeIndex: number): number
-	local currentRouteIndex = 0
-	for slotIndex = 1, FactoryLayout.SlotCount do
-		if layout[slotIndex] then
-			currentRouteIndex += 1
-			if currentRouteIndex == routeIndex then
-				return slotIndex
-			end
-		end
-	end
-	return 1
-end
-
 local function updateVisualItems(player: Player, factory: any)
 	local activeItems = factory.simulation:getActiveItemsForDebug()
 	local activeById = {}
 	local visualConfig = MachineVisualConfig.ConveyorItem
+	local buffModifiers = getSaleBuffModifiers(player)
+	local seller = MachineDefinitions.get(factory.layout[FactoryLayout.SellerSlotIndex])
+	local sellerModifiers = seller and seller.SaleModifiers or nil
+	local soldAny = false
+	factory.itemPresentationState = factory.itemPresentationState or {}
+	local function setAttribute(part: BasePart, name: string, value: any)
+		if part:GetAttribute(name) ~= value then part:SetAttribute(name, value) end
+	end
 	for _, item in ipairs(activeItems) do
 		activeById[item.Id] = true
 		local visual = factory.visualItems[item.Id]
 		if not visual then
 			visual = createPart(factory.plot, string.format("Item_%d", item.Id), Vector3.new(visualConfig.Size, visualConfig.Size, visualConfig.Size), factory.origin + Vector3.new(0, visualConfig.DropStartHeight + MachineVisualConfig.Conveyor.Elevation, 0), Color3.fromRGB(235, 235, 235))
+			visual:SetAttribute("FactoryItem", true)
+			visual:SetAttribute("OwnerUserId", player.UserId)
+			visual:SetAttribute("ItemId", item.Id)
 			factory.visualItems[item.Id] = visual
 		end
 		local stateColors = {
@@ -371,45 +330,59 @@ local function updateVisualItems(player: Player, factory: any)
 		visual.Size = Vector3.new(size, size, size)
 		visual.Color = stateColors[item.VisualState] or stateColors.Base
 
-		local physicalSlotIndex = getPhysicalSlotForRouteIndex(factory.layout, item.SlotIndex)
-		local segmentProgress = 1 - math.clamp(item.TimeRemaining / FactoryConfig.TravelTimePerSlotSeconds, 0, 1)
-		local x = (physicalSlotIndex - 1) * MachineVisualConfig.SlotPitch
-		local nextPhysicalSlotIndex = getPhysicalSlotForRouteIndex(factory.layout, item.SlotIndex + 1)
-		local travelDistance = if item.ReadyForSale then 0 elseif nextPhysicalSlotIndex > physicalSlotIndex
-			then (nextPhysicalSlotIndex - physicalSlotIndex) * MachineVisualConfig.SlotPitch
-			else MachineVisualConfig.SlotPitch
-		local conveyorConfig = MachineVisualConfig.Conveyor
-		local deckTop = conveyorConfig.DeckCenterY + conveyorConfig.DeckThickness / 2 + conveyorConfig.Elevation
-		local rollerTop = conveyorConfig.RollerCenterY + conveyorConfig.RollerDiameter / 2 + conveyorConfig.Elevation
-		local landingHeight = math.max(deckTop, rollerTop) + size / 2 + visualConfig.LandingClearance
-		local y = landingHeight
-		if item.SlotIndex == 1 then
-			local fallFraction = math.clamp(visualConfig.DropDurationSeconds / FactoryConfig.TravelTimePerSlotSeconds, 0.05, 0.9)
-			local fallProgress = math.clamp(segmentProgress / fallFraction, 0, 1)
-			local easedFall = fallProgress * fallProgress * (3 - 2 * fallProgress)
-			y = visualConfig.DropStartHeight + conveyorConfig.Elevation + (landingHeight - visualConfig.DropStartHeight - conveyorConfig.Elevation) * easedFall
-			if segmentProgress > fallFraction then
-				x += ((segmentProgress - fallFraction) / (1 - fallFraction)) * travelDistance
-			end
-		else
-			x += segmentProgress * travelDistance
-		end
+		local x, y = FactoryItemGeometry.itemPosition(factory.layout, item)
 		visual.Position = factory.origin + Vector3.new(x, y, 0)
-		visual:SetAttribute("ItemValue", item.Value)
+		local cache = factory.itemPresentationState[item.Id]
+		local typeAdd, typeMult = item.TypeModifiers.AdditiveBonus or 0, item.TypeModifiers.Multiplier or 1
+		local buffAdd, buffMult = buffModifiers.AdditiveBonus or 0, buffModifiers.Multiplier or 1
+		local sellerAdd, sellerMult = if sellerModifiers then sellerModifiers.AdditiveBonus or 0 else 0, if sellerModifiers then sellerModifiers.Multiplier or 1 else 1
+		if not cache or cache.Value ~= item.Value or cache.Count ~= #item.ModifierLabels
+			or cache.TypeAdd ~= typeAdd or cache.TypeMult ~= typeMult
+			or cache.BuffAdd ~= buffAdd or cache.BuffMult ~= buffMult
+			or cache.SellerAdd ~= sellerAdd or cache.SellerMult ~= sellerMult then
+			local breakdown = SaleValueRules.getBreakdown(item.Value, item.TypeModifiers, buffModifiers, sellerModifiers, FactoryConfig.MaxItemValue)
+			setAttribute(visual, "ItemValue", item.Value)
+			setAttribute(visual, "ItemBaseValue", item.BaseValue)
+			setAttribute(visual, "ItemType", item.TypeId)
+			setAttribute(visual, "ItemModifiers", table.concat(item.ModifierLabels, " · "))
+			setAttribute(visual, "ItemChainMultiplier", item.Value / item.BaseValue)
+			if breakdown then
+				setAttribute(visual, "ItemSaleValue", breakdown.Value)
+				setAttribute(visual, "ItemSaleMultiplier", breakdown.Multiplier)
+				setAttribute(visual, "ItemAdditiveBonus", breakdown.AdditiveBonus)
+			end
+			local layers = {}
+			local function describeLayer(name: string, layer: any)
+				if layer and ((layer.AdditiveBonus or 0) ~= 0 or (layer.Multiplier or 1) ~= 1) then
+					table.insert(layers, name .. " +" .. NumberFormatter.format(layer.AdditiveBonus or 0) .. " ×" .. NumberFormatter.format(layer.Multiplier or 1))
+				end
+			end
+			describeLayer("Type", item.TypeModifiers)
+			describeLayer("Buff", buffModifiers)
+			describeLayer("Seller", sellerModifiers)
+			setAttribute(visual, "ItemSaleLayers", if #layers > 0 then table.concat(layers, " · ") else "No sale bonuses")
+			factory.itemPresentationState[item.Id] = { Value = item.Value, Count = #item.ModifierLabels,
+				TypeAdd = typeAdd, TypeMult = typeMult, BuffAdd = buffAdd, BuffMult = buffMult, SellerAdd = sellerAdd, SellerMult = sellerMult }
+		end
 
 		local sellerHitbox = factory.sellerHitbox
 		if item.ReadyForSale and sellerHitbox and overlapsHitbox(sellerHitbox, visual) then
-			local sold = factory.simulation:sellItem(item.Id, getSaleBuffModifiers(player))
+			local sold, credited = factory.simulation:sellItem(item.Id, buffModifiers)
 			if sold then
+				soldAny = true
+				EffectService.fire(player, "ItemSold", { Coins = credited, Balance = factory.simulation:getSnapshot().Coins, Position = visual.Position, ItemId = item.Id })
 				activeById[item.Id] = nil
 			end
 		end
 	end
 
+	if soldAny then updateDebugAttributes(player, factory) end
+
 	for itemId, visual in pairs(factory.visualItems) do
 		if not activeById[itemId] then
 			visual:Destroy()
 			factory.visualItems[itemId] = nil
+			factory.itemPresentationState[itemId] = nil
 		end
 	end
 end

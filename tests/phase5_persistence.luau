@@ -38,7 +38,7 @@ local safe = SaveSchema.sanitize({
 		TooLarge = 9_999_999_999,
 	},
 })
-expect(safe.Coins == FactoryConfig.MaxItemValue, "coins must be capped during sanitization")
+expect(safe.Coins == 9_999_999_999, "valid wallets above the cube cap must survive sanitization")
 expect(safe.Capacity == FactoryConfig.MaxFactoryCapacity, "capacity must be capped during sanitization")
 expect(safe.RollCount == 4, "valid roll count should survive sanitization")
 expect(safe.BoosterInventory.Coin == 99 and safe.BoosterInventory.Luck == 2 and safe.BoosterInventory.Unknown == nil, "booster counts should be bounded and known")
