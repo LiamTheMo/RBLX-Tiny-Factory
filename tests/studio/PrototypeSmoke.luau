@@ -203,7 +203,6 @@ local success, message = pcall(function()
 	task.wait(0.12)
 	local rollingText = overlay.RevealCard.Text
 	assert(overlay.BackgroundTransparency == 1, "normal roll animation should leave the world background clear")
-	assert(overlay.BackgroundTransparency == 1, "normal roll should keep the world background transparent")
 	assert(overlay.Heading.BackgroundTransparency == 1, "roll heading should be text without a backing fill")
 	assert(overlay.RevealCard.BackgroundTransparency == 1, "rolling result should be text without a card fill")
 	assert(not overlay.RevealCard:FindFirstChildOfClass("UIStroke"), "rolling result should not have a box outline")
