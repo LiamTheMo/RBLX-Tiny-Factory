@@ -99,6 +99,8 @@ Random world boosters are defined in `BoosterConfig` and validated by pure `Boos
 
 Seller is a rollable machine definition with a configured 2% base chance. The factory requires exactly one Seller in its dedicated end bay. A newly rolled Seller may replace the old one transactionally; any previously saved movable Seller is migrated into the bay.
 
+Production cubes wait for contact with the server-owned Seller hitbox before the sale is settled. The server calculates currency from the processed cube value plus additive bonuses from its output type, active sale buffs, and Seller, then applies those layers' multipliers, floors to whole Coins, and caps the payout. The cube is removed and sale statistics are updated in the same transaction as the wallet credit. Luck remains a roll-odds buff and does not change sale value.
+
 The configured base machine chances total 100%. Current values are starting balance data for playtests. Rarity may influence average expected power, but should not map directly to a fixed multiplier ladder.
 
 Avoid:

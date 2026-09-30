@@ -52,13 +52,47 @@ local function refreshLuck(player: Player, profile: any, notifyExpired: boolean)
 	return profile.LuckMultiplier
 end
 
+local function refreshSaleValueBoost(player: Player, profile: any): { [string]: number }
+	local now = workspace:GetServerTimeNow()
+	if profile.SaleValueExpiresAt <= now then
+		profile.SaleValueAdditiveBonus = 0
+		profile.SaleValueMultiplier = 1
+		profile.SaleValueExpiresAt = 0
+	end
+	if player:GetAttribute("FactorySaleValueAdditiveBonus") ~= profile.SaleValueAdditiveBonus then
+		player:SetAttribute("FactorySaleValueAdditiveBonus", profile.SaleValueAdditiveBonus)
+	end
+	if player:GetAttribute("FactorySaleValueMultiplier") ~= profile.SaleValueMultiplier then
+		player:SetAttribute("FactorySaleValueMultiplier", profile.SaleValueMultiplier)
+	end
+	if player:GetAttribute("FactorySaleValueExpiresAt") ~= profile.SaleValueExpiresAt then
+		player:SetAttribute("FactorySaleValueExpiresAt", profile.SaleValueExpiresAt)
+	end
+	return {
+		AdditiveBonus = profile.SaleValueAdditiveBonus,
+		Multiplier = profile.SaleValueMultiplier,
+		ExpiresAt = profile.SaleValueExpiresAt,
+	}
+end
+
 local function getProfile(player: Player): any
 	local profile = profiles[player]
 	if not profile then
-		profile = { RollCount = 0, NextRollAt = 0, LuckMultiplier = 1, LuckExpiresAt = 0 }
+		profile = {
+			RollCount = 0,
+			NextRollAt = 0,
+			LuckMultiplier = 1,
+			LuckExpiresAt = 0,
+			SaleValueAdditiveBonus = 0,
+			SaleValueMultiplier = 1,
+			SaleValueExpiresAt = 0,
+		}
 		profiles[player] = profile
 		player:SetAttribute("FactoryLuckMultiplier", 1)
 		player:SetAttribute("FactoryLuckExpiresAt", 0)
+		player:SetAttribute("FactorySaleValueAdditiveBonus", 0)
+		player:SetAttribute("FactorySaleValueMultiplier", 1)
+		player:SetAttribute("FactorySaleValueExpiresAt", 0)
 	end
 	return profile
 end
@@ -91,6 +125,7 @@ local function getClientState(player: Player): { [string]: any }
 	end
 	local profile = getProfile(player)
 	local luckMultiplier = refreshLuck(player, profile, false)
+	local saleValueBoost = refreshSaleValueBoost(player, profile)
 	local rollCost = EconomyRules.getRollCost(profile.RollCount)
 	local capacityCost = EconomyRules.getCapacityCost(state.capacity)
 	return {
@@ -113,6 +148,9 @@ local function getClientState(player: Player): { [string]: any }
 		LastRollLuckMultiplier = player:GetAttribute("FactoryLastRollLuckMultiplier") or 1,
 		LuckMultiplier = luckMultiplier,
 		LuckExpiresAt = profile.LuckExpiresAt,
+		SaleValueAdditiveBonus = saleValueBoost.AdditiveBonus,
+		SaleValueMultiplier = saleValueBoost.Multiplier,
+		SaleValueExpiresAt = saleValueBoost.ExpiresAt,
 	}
 end
 
@@ -235,6 +273,28 @@ function EconomyService.grantLuckBoost(player: Player, multiplier: number, durat
 	return true
 end
 
+function EconomyService.grantSaleValueBoost(player: Player, additiveBonus: number, multiplier: number, durationSeconds: number): boolean
+	if not dataIsReady(player)
+		or type(additiveBonus) ~= "number" or additiveBonus ~= additiveBonus or additiveBonus < 0 or additiveBonus == math.huge
+		or type(multiplier) ~= "number" or multiplier ~= multiplier or multiplier < 1 or multiplier > EconomyConfig.MaxSaleValueMultiplier
+		or type(durationSeconds) ~= "number" or durationSeconds ~= durationSeconds or durationSeconds < 1
+			or durationSeconds > BoosterConfig.MaxSaleValueDurationSeconds then
+		return false
+	end
+
+	local profile = getProfile(player)
+	local current = refreshSaleValueBoost(player, profile)
+	local now = workspace:GetServerTimeNow()
+	profile.SaleValueAdditiveBonus = math.min(current.AdditiveBonus + additiveBonus, FactoryConfig.MaxItemValue)
+	profile.SaleValueMultiplier = math.min(current.Multiplier * multiplier, EconomyConfig.MaxSaleValueMultiplier)
+	profile.SaleValueExpiresAt = math.min(
+		math.max(profile.SaleValueExpiresAt, now + durationSeconds),
+		now + BoosterConfig.MaxSaleValueDurationSeconds
+	)
+	refreshSaleValueBoost(player, profile)
+	return true
+end
+
 function EconomyService.getPersistentState(player: Player): { [string]: any }?
 	local profile = profiles[player]
 	if not profile then
@@ -285,7 +345,10 @@ function EconomyService.start()
 	end
 	task.spawn(function()
 		while true do
-			for player, profile in pairs(profiles) do refreshLuck(player, profile, true) end
+			for player, profile in pairs(profiles) do
+				refreshLuck(player, profile, true)
+				refreshSaleValueBoost(player, profile)
+			end
 			task.wait(1)
 		end
 	end)

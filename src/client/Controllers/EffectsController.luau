@@ -17,6 +17,8 @@ local handlers: { [string]: ({ [string]: any }) -> () } = {}
 local started = false
 local sequence = 0
 local toastSequence = 0
+local rollOverlayColor = Color3.fromRGB(126, 128, 132)
+local rollOverlayTransparency = 0.55
 
 local rarityColors: { [string]: Color3 } = {}
 for _, band in ipairs(EconomyConfig.RarityOddsBands) do
@@ -70,7 +72,7 @@ function EffectsController.start()
 	local overlay = Instance.new("Frame")
 	overlay.Name = "CutsceneOverlay"
 	overlay.Size = UDim2.fromScale(1, 1)
-	overlay.BackgroundColor3 = Color3.fromRGB(10, 10, 20)
+	overlay.BackgroundColor3 = rollOverlayColor
 	overlay.BackgroundTransparency = 1
 	overlay.BorderSizePixel = 0
 	overlay.Visible = false
@@ -152,7 +154,7 @@ function EffectsController.start()
 			pulse:Cancel()
 		end
 		overlay.Visible = true
-		overlay.BackgroundTransparency = 1
+		overlay.BackgroundTransparency = rollOverlayTransparency
 		heading.Text = "ROLLING A MACHINE"
 		heading.TextColor3 = Color3.new(1, 1, 1)
 		card.Text = "? ? ?"
@@ -169,7 +171,7 @@ function EffectsController.start()
 			pulse:Cancel()
 		end
 		overlay.Visible = true
-		overlay.BackgroundTransparency = 1
+		overlay.BackgroundTransparency = rollOverlayTransparency
 		heading.Text = "ULTRA RARE MACHINE!"
 		local rarity = payload.Rarity or "Legendary"
 		local rarityColor = getRarityColor(rarity)
@@ -182,7 +184,6 @@ function EffectsController.start()
 			if token == sequence then
 				overlay.Visible = false
 				overlay.BackgroundTransparency = 1
-				
 			end
 		end)
 	end)
@@ -194,7 +195,7 @@ function EffectsController.start()
 			pulse:Cancel()
 		end
 		overlay.Visible = true
-		overlay.BackgroundTransparency = 1
+		overlay.BackgroundTransparency = rollOverlayTransparency
 		heading.Text = "ROLLING A MACHINE"
 		heading.TextColor3 = Color3.new(1, 1, 1)
 		local basePool = MachineDefinitions.getRollPool()
@@ -241,6 +242,7 @@ function EffectsController.start()
 			task.wait(1.2)
 			if token == sequence then
 				overlay.Visible = false
+				overlay.BackgroundTransparency = 1
 			end
 		end)
 	end)
@@ -251,6 +253,7 @@ function EffectsController.start()
 			pulse:Cancel()
 		end
 		overlay.Visible = false
+		overlay.BackgroundTransparency = 1
 		showToast(payload.Reason or "Roll unavailable", Color3.fromRGB(255, 150, 120))
 	end)
 	EffectsController.register("FirstItemSpawned", function()

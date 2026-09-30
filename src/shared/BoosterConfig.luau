@@ -7,6 +7,7 @@ return {
 	MaxActiveDropsWorldwide = 24,
 	DespawnAfterSeconds = 45,
 	MaxLuckDurationSeconds = 120,
+	MaxSaleValueDurationSeconds = 120,
 	MaxStoredPerType = 99,
 	SpawnBounds = { MinX = 1.5, MaxX = 26.5, MinZ = -2.5, MaxZ = 2.5 },
 	LandRaycast = {

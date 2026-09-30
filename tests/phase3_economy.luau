@@ -5,6 +5,7 @@ local EconomyRules = require("../src/shared/EconomyRules")
 local MachineDefinitions = require("../src/shared/MachineDefinitions")
 local BoosterConfig = require("../src/shared/BoosterConfig")
 local BoosterRules = require("../src/shared/BoosterRules")
+local SaleValueRules = require("../src/shared/SaleValueRules")
 
 local function expect(condition: boolean, message: string)
 	if not condition then
@@ -16,6 +17,22 @@ local firstRollCost = EconomyRules.getRollCost(0)
 local secondRollCost = EconomyRules.getRollCost(1)
 expect(firstRollCost == 0, "the first roll should be free")
 expect(secondRollCost == 0, "every roll should be free")
+
+local layeredSale = SaleValueRules.calculate(
+	10,
+	{ AdditiveBonus = 2, Multiplier = 1.5 },
+	{ AdditiveBonus = 3, Multiplier = 2 },
+	{ AdditiveBonus = 4, Multiplier = 1.25 },
+	1000
+)
+expect(layeredSale == 71, "sale value should add all bonuses before multiplying and flooring")
+expect(
+	SaleValueRules.calculate(10, { AdditiveBonus = 1, Multiplier = 1.5 }, nil, { AdditiveBonus = 2, Multiplier = 2 }, 1000) == 39,
+	"seller modifiers should still apply when no buff layer is active"
+)
+expect(SaleValueRules.calculate(10, nil, nil, nil, 5) == 5, "sale value should respect the configured item-value cap")
+expect(SaleValueRules.calculate(10, { AdditiveBonus = math.huge, Multiplier = 0 }, nil, nil, 100) == 10, "invalid type modifiers should fall back to neutral values")
+expect(SaleValueRules.calculate(math.huge, nil, nil, nil, 100) == nil, "non-finite item values must not be sold")
 
 local rollPool = MachineDefinitions.getRollPool()
 local rarityBands = EconomyConfig.RarityOddsBands
