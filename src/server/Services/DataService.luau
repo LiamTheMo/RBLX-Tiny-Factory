@@ -21,6 +21,7 @@ local started = false
 local lockRefreshAccumulator = 0
 
 local SESSION_LOCK_SECONDS = 300
+local AUTOSAVE_INTERVAL_SECONDS = 60
 
 local function sessionIdFor(player: Player): string
 	local jobId = game.JobId
@@ -165,38 +166,18 @@ local function savePlayer(player: Player, releaseLock: boolean?)
 	if not success or conflict or result == nil then
 		player:SetAttribute("FactoryDataSaveError", if conflict then "Session ownership changed" else "Data store unavailable")
 		AnalyticsService.record(player, "DataSaveFailure")
+		if conflict then
+			loadedPlayers[player] = nil
+			setLoadStatus(player, false, true, "Session ownership changed")
+		end
 		if not success then
 			warn(`Tiny Factory data save failed for {player.UserId}: {result}`)
 		end
 		return
 	end
 	player:SetAttribute("FactoryDataSaved", true)
-end
-
-local function refreshLock(player: Player)
-	local sessionId = sessionIds[player]
-	if not sessionId or not loadedPlayers[player] then
-		return
-	end
-	local conflict = false
-	local success = pcall(function()
-		store:UpdateAsync(keyFor(player), function(oldValue)
-			local data, owner = unpackRecord(oldValue)
-			if owner ~= sessionId then
-				conflict = true
-				return nil
-			end
-			return {
-				Data = SaveSchema.sanitize(data),
-				_SessionId = sessionId,
-				_LastSeen = os.time(),
-			}
-		end)
-	end)
-	if not success or conflict then
-		loadedPlayers[player] = nil
-		setLoadStatus(player, false, true, "Session ownership changed")
-	end
+	player:SetAttribute("FactoryDataLastSaved", now)
+	player:SetAttribute("FactoryDataSaveError", nil)
 end
 
 function DataService.start()
@@ -225,12 +206,15 @@ function DataService.start()
 	end)
 	RunService.Heartbeat:Connect(function(deltaTime)
 		lockRefreshAccumulator += deltaTime
-		if lockRefreshAccumulator < 60 then
+		if lockRefreshAccumulator < AUTOSAVE_INTERVAL_SECONDS then
 			return
 		end
 		lockRefreshAccumulator = 0
 		for player in pairs(loadedPlayers) do
-			refreshLock(player)
+			-- Refresh the session lease and persist the latest factory/economy state
+			-- together. Previously the lease refreshed without saving, leaving
+			-- progress vulnerable to a server crash before PlayerRemoving fired.
+			savePlayer(player, false)
 		end
 	end)
 	for _, player in Players:GetPlayers() do
