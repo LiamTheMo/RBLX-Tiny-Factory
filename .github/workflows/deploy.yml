@@ -2,9 +2,9 @@ name: Tiny Factory validation and deployment
 
 on:
   pull_request:
-    branches: [main, 'v*']
+    branches: [main, 'v[0-9]+.[0-9][0-9]']
   push:
-    branches: [main, 'v*']
+    branches: [main, 'v[0-9]+.[0-9][0-9]']
   workflow_dispatch:
     inputs:
       publish:
