@@ -83,6 +83,8 @@ function EffectsController.start()
 	heading.Size = UDim2.new(0.8, 0, 0, 40)
 	heading.BackgroundTransparency = 1
 	heading.TextColor3 = Color3.new(1, 1, 1)
+	heading.TextStrokeColor3 = Color3.fromRGB(20, 24, 32)
+	heading.TextStrokeTransparency = 0.22
 	heading.Font = Enum.Font.GothamBlack
 	heading.TextScaled = true
 	heading.Parent = overlay
@@ -92,16 +94,17 @@ function EffectsController.start()
 	card.AnchorPoint = Vector2.new(0.5, 0.5)
 	card.Position = UDim2.fromScale(0.5, 0.5)
 	card.Size = UDim2.new(0.9, 0, 0, 96)
-	card.BackgroundColor3 = Color3.fromRGB(34, 30, 42)
 	card.BackgroundTransparency = 1
 	card.BorderSizePixel = 0
 	card.TextColor3 = Color3.new(1, 1, 1)
+	card.TextStrokeColor3 = Color3.fromRGB(20, 24, 32)
+	card.TextStrokeTransparency = 0.24
 	card.Font = Enum.Font.GothamBlack
 	card.TextScaled = true
 	card.TextWrapped = false
 	local cardTextLimit = Instance.new("UITextSizeConstraint")
 	cardTextLimit.MinTextSize = 14
-	cardTextLimit.MaxTextSize = 20
+	cardTextLimit.MaxTextSize = 24
 	cardTextLimit.Parent = card
 	card.Parent = overlay
 	local sizeLimit = Instance.new("UISizeConstraint")
@@ -166,7 +169,7 @@ function EffectsController.start()
 			pulse:Cancel()
 		end
 		overlay.Visible = true
-		overlay.BackgroundTransparency = 0.12
+		overlay.BackgroundTransparency = 1
 		heading.Text = "ULTRA RARE MACHINE!"
 		local rarity = payload.Rarity or "Legendary"
 		local rarityColor = getRarityColor(rarity)
@@ -179,7 +182,7 @@ function EffectsController.start()
 			if token == sequence then
 				overlay.Visible = false
 				overlay.BackgroundTransparency = 1
-				showToast("Ultra rare roll!", rarityColor)
+				
 			end
 		end)
 	end)

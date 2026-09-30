@@ -5,8 +5,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
-local MachineDefinitions = require(Shared:WaitForChild("MachineDefinitions"))
-local EconomyRules = require(Shared:WaitForChild("EconomyRules"))
 local EffectsController = require(script.Parent.EffectsController)
 
 local EconomyController = {}
@@ -46,7 +44,7 @@ function EconomyController.start()
 	local remotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Factory")
 	local getState = remotes:WaitForChild("GetEconomyState") :: RemoteFunction
 	local rollMachine = remotes:WaitForChild("RollMachine") :: RemoteFunction
-		local buyCapacity = remotes:WaitForChild("BuyCapacity") :: RemoteFunction
+	local buyCapacity = remotes:WaitForChild("BuyCapacity") :: RemoteFunction
 	local presentationEvent = remotes:WaitForChild("PresentationEvent") :: RemoteEvent
 
 	local screenGui = Instance.new("ScreenGui")
@@ -87,28 +85,13 @@ function EconomyController.start()
 	luckStatus.TextXAlignment = Enum.TextXAlignment.Left
 	luckStatus.Parent = panel
 
-	local result = Instance.new("TextLabel")
-	result.BackgroundTransparency = 1
-	result.TextColor3 = COLORS.Accent
-	result.TextWrapped = false
-	result.Font = Enum.Font.GothamBold
-	result.TextScaled = true
-	local resultTextLimit = Instance.new("UITextSizeConstraint")
-	resultTextLimit.MinTextSize = 13
-	resultTextLimit.MaxTextSize = 18
-	resultTextLimit.Parent = result
-	result.Parent = panel
-
 	local rollDock = Instance.new("Frame")
 	rollDock.Name = "RollDock"
 	rollDock.AnchorPoint = Vector2.new(0.5, 1)
 	rollDock.Position = UDim2.new(0.5, 0, 1, -14)
-	rollDock.BackgroundColor3 = COLORS.Panel
+	rollDock.BackgroundTransparency = 1
 	rollDock.BorderSizePixel = 0
 	rollDock.Parent = screenGui
-	local dockCorner = Instance.new("UICorner")
-	dockCorner.CornerRadius = UDim.new(0, 16)
-	dockCorner.Parent = rollDock
 	local roll = createButton(rollDock, "Roll", "Roll")
 	roll.Font = Enum.Font.GothamBlack
 	roll.TextSize = 20
@@ -141,8 +124,11 @@ function EconomyController.start()
 		roll.TextWrapped = false
 		roll.Active = ready and not rolling and remaining <= 0
 		roll.AutoButtonColor = roll.Active
+		roll.BackgroundTransparency = if rolling then 1 else 0
 		roll.BackgroundColor3 = if roll.Active then COLORS.Accent else COLORS.Button
 		roll.TextColor3 = if roll.Active then COLORS.Panel else COLORS.Text
+		roll.TextStrokeColor3 = Color3.fromRGB(20, 24, 32)
+		roll.TextStrokeTransparency = if rolling then 0.2 else 1
 	end
 
 	local function syncCooldown(response: any)
@@ -200,12 +186,7 @@ function EconomyController.start()
 		EffectsController.play("RollPending")
 		local response = invoke(rollMachine)
 		if response and response.Success then
-			local definition = response.LastRoll and MachineDefinitions.get(response.LastRoll)
 			local luckMultiplier = response.LastRollLuckMultiplier or 1
-			local rollPool = EconomyRules.getLuckAdjustedRollPool(MachineDefinitions.getRollPool(), luckMultiplier)
-			local odds = if definition and definition.Rollable then EconomyRules.getMachineOddsLabel(definition.Id, rollPool) else nil
-			local machineName = definition and definition.DisplayName or response.LastRoll or "Machine"
-			result.Text = if odds then string.format("Rolled: %s · %s", machineName, odds) else string.format("Rolled: %s", machineName)
 			refresh(response)
 			EffectsController.play("MachineRolled", { MachineId = response.LastRoll, Rarity = response.LastRarity, LuckMultiplier = luckMultiplier })
 		else
@@ -236,7 +217,7 @@ function EconomyController.start()
 			panelWidth = math.floor(math.clamp(viewportWidth * widthRatio, 232, 272))
 			panelWidth = math.min(panelWidth, math.max(184, viewportWidth - 16))
 		end
-		panel.Size = if compact then UDim2.fromOffset(panelWidth, 152) else UDim2.fromOffset(panelWidth, 180)
+		panel.Size = if compact then UDim2.fromOffset(panelWidth, 134) else UDim2.fromOffset(panelWidth, 148)
 		panel.Position = if compactLandscape or compact then UDim2.new(1, -panelWidth - 8, 0, 8) else UDim2.new(1, -316, 0, 16)
 		title.Position = UDim2.fromOffset(8, 8)
 		title.Size = UDim2.new(1, -16, 0, if compact then 24 else 26)
@@ -244,9 +225,7 @@ function EconomyController.start()
 		status.Size = UDim2.new(1, -16, 0, if compact then 30 else 24)
 		luckStatus.Position = UDim2.fromOffset(8, if compact then 64 else 62)
 		luckStatus.Size = UDim2.new(1, -16, 0, 16)
-		result.Position = UDim2.fromOffset(8, if compact then 82 else 84)
-		result.Size = UDim2.new(1, -16, 0, if compact then 20 else 24)
-		capacity.Position = UDim2.fromOffset(8, if compact then 106 else 130)
+		capacity.Position = UDim2.fromOffset(8, if compact then 92 else 96)
 		capacity.Size = UDim2.fromOffset(panelWidth - 16, if compact then 36 else 34)
 		rollDock.Size = UDim2.fromOffset(if compact then math.min(268, viewportWidth - 24) else 320, 72)
 		roll.Position = UDim2.fromOffset(8, 8)
