@@ -1,6 +1,8 @@
 --!strict
 
 local EconomyRules = require("../src/shared/EconomyRules")
+local EconomyConfig = require("../src/shared/EconomyConfig")
+local MachineDefinitions = require("../src/shared/MachineDefinitions")
 
 local function expect(condition: boolean, message: string)
 	if not condition then
@@ -34,5 +36,18 @@ expect(not maxCapacityCost, "maximum capacity must not have another upgrade")
 expect(EconomyRules.weightedPick({ A = 1, B = 1 }, 0) ~= nil, "weighted selection should return a result")
 expect(EconomyRules.weightedPick({ A = 1 }, 1) == nil, "out-of-range weighted selection must fail")
 expect(EconomyRules.getResaleValue("Common") == 0, "free rolls must not mint Coins through resale")
+
+local chances = EconomyRules.getMachineRollChances(EconomyConfig.RarityWeights, MachineDefinitions.getRollPool())
+local totalChance = 0
+for _, chance in pairs(chances) do
+	expect(chance > 0, "every rollable machine must have a non-zero chance")
+	totalChance += chance
+end
+expect(math.abs(totalChance - 100) < 1e-8, "nested rarity and item chances must add to 100 percent")
+local commonItems = MachineDefinitions.getRollPool("Common")
+local commonWeight = 0
+for _, definition in ipairs(commonItems) do commonWeight += definition.RollWeight or 0 end
+local expectedPolishedChance = (EconomyConfig.RarityWeights.Common / 100) * (5 / commonWeight) * 100
+expect(math.abs(chances.PolishedRoller - expectedPolishedChance) < 1e-8, "machine weight within rarity must determine the second roll")
 
 print("Phase 3 economy tests passed")

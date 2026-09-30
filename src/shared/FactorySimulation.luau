@@ -8,10 +8,13 @@ else
 end
 
 local MachineDefinitions
+local CubeTypeDefinitions
 if script ~= nil then
 	MachineDefinitions = require(script.Parent.MachineDefinitions)
+	CubeTypeDefinitions = require(script.Parent.CubeTypeDefinitions)
 else
 	MachineDefinitions = require("./MachineDefinitions")
+	CubeTypeDefinitions = require("./CubeTypeDefinitions")
 end
 
 type Item = {
@@ -20,9 +23,12 @@ type Item = {
 	SlotIndex: number,
 	TimeRemaining: number,
 	SourceMachineId: string,
+	CubeType: string,
 	VisualState: string,
 	SizeScale: number,
 	TravelScale: number,
+	SellerProcessingStarted: boolean,
+	SaleDueAt: number?,
 }
 
 export type SimulationConfig = {
@@ -85,6 +91,7 @@ function FactorySimulation.new(config: SimulationConfig?): any
 		producedItems = 0,
 		processedItems = 0,
 		soldItems = 0,
+		sellerNextAvailableAt = 0,
 		droppedItemsAtCap = 0,
 		skippedCatchUpSpawns = 0,
 		totalValueSold = 0,
@@ -138,17 +145,20 @@ function FactorySimulation:_spawnItem()
 	self.producedItems += 1
 	table.insert(self.activeItems, {
 		Id = self.nextItemId,
-		Value = math.min(producer.OutputValue or 1, self.maxItemValue),
+		Value = math.min((producer.OutputValue or 1) * ((CubeTypeDefinitions.get(producer.CubeType or "Standard") or {}).ValueMultiplier or 1), self.maxItemValue),
 		SlotIndex = 1,
 		TimeRemaining = self.travelTimePerSlotSeconds,
 		SourceMachineId = producer.Id,
+		CubeType = producer.CubeType or "Standard",
 		VisualState = "Base",
 		SizeScale = 1,
 		TravelScale = 1,
+		SellerProcessingStarted = false,
+		SaleDueAt = nil,
 	})
 end
 
-function FactorySimulation:_processItemAtSlot(item: Item): boolean
+function FactorySimulation:_processItemAtSlot(item: Item): boolean?
 	local machineId = self.route[item.SlotIndex]
 	local definition = machineId and MachineDefinitions.get(machineId)
 	if not definition then
@@ -159,6 +169,10 @@ function FactorySimulation:_processItemAtSlot(item: Item): boolean
 		local behavior = definition.Behavior or "MultiplyValue"
 		if behavior == "MultiplyValue" then
 			item.Value = math.min(item.Value * (definition.Multiplier or 1), self.maxItemValue)
+		elseif behavior == "TypeMultiplier" then
+			if item.CubeType == definition.TypeFilter then
+				item.Value = math.min(item.Value * (definition.Multiplier or 1), self.maxItemValue)
+			end
 		elseif behavior == "ScaleVisual" then
 			item.SizeScale = math.min(item.SizeScale * (definition.SizeScale or 1), 4)
 		elseif behavior == "SetMaterial" then
@@ -174,22 +188,66 @@ function FactorySimulation:_processItemAtSlot(item: Item): boolean
 					SlotIndex = item.SlotIndex + 1,
 					TimeRemaining = self.travelTimePerSlotSeconds,
 					SourceMachineId = item.SourceMachineId,
+					CubeType = item.CubeType,
 					VisualState = item.VisualState,
 					SizeScale = item.SizeScale,
 					TravelScale = item.TravelScale,
+					SellerProcessingStarted = false,
+					SaleDueAt = nil,
 				})
 			end
 		elseif behavior == "Goldenize" then
 			item.Value = math.min(item.Value * (definition.Multiplier or 1), self.maxItemValue)
 			item.VisualState = definition.VisualState or "Golden"
 		elseif behavior == "RandomMultiplier" then
-			local multiplier = if item.Id % 2 == 0 then 3 else 0.5
-			item.Value = math.max(1, math.min(math.floor(item.Value * multiplier), self.maxItemValue))
+			local chance = definition.BonusChance
+			if chance == nil then
+				local multiplier = if item.Id % 2 == 0 then 3 else 0.5
+				item.Value = math.max(1, math.min(math.floor(item.Value * multiplier), self.maxItemValue))
+			elseif chance > 0 then
+				local denominator = math.max(1, math.floor(1 / chance + 0.5))
+				if item.Id % denominator == 0 then
+					item.Value = math.min(item.Value * (definition.BonusMultiplier or 2), self.maxItemValue)
+				end
+			end
 		end
 		self.processedItems += 1
 	elseif definition.Category == "Seller" then
-		self.coins += item.Value
-		self.totalValueSold += item.Value
+		if not item.SellerProcessingStarted and (definition.SaleIntervalSeconds or 0) > 0 then
+			local saleStartsAt = math.max(self.sellerNextAvailableAt, self.timeSeconds)
+			item.SaleDueAt = saleStartsAt + (definition.SaleIntervalSeconds or 0)
+			self.sellerNextAvailableAt = item.SaleDueAt
+			item.SellerProcessingStarted = true
+			item.TimeRemaining = item.SaleDueAt - self.timeSeconds
+			return nil
+		end
+		if item.SaleDueAt and self.timeSeconds + 1e-9 < item.SaleDueAt then
+			item.TimeRemaining = item.SaleDueAt - self.timeSeconds
+			return nil
+		end
+		local payoutMultiplier = definition.PayoutMultiplier or 1
+		local behavior = definition.Behavior or "Payout"
+		if behavior == "ConditionalPayout" and item.Value < (definition.MinimumValue or math.huge) then
+			payoutMultiplier = 1
+		elseif behavior == "TypePayout" and item.CubeType ~= definition.TypeFilter then
+			payoutMultiplier = 1
+		elseif behavior == "ChancePayout" then
+			local chance = definition.BonusChance or 0
+			local denominator = math.max(1, math.floor(1 / math.max(chance, 0.000001) + 0.5))
+			payoutMultiplier = if item.Id % denominator == 0 then (definition.BonusMultiplier or 1) else 1
+		elseif behavior == "StreakPayout" then
+			local saleNumber = self.soldItems + 1
+			payoutMultiplier = if saleNumber % (definition.BonusEvery or math.huge) == 0 then (definition.BonusMultiplier or 1) else 1
+		elseif behavior == "RarityPayout" then
+			local cubeType = CubeTypeDefinitions.get(item.CubeType)
+			local rarities = { Common = 1, Uncommon = 2, Rare = 3, Epic = 4, Legendary = 5 }
+			if not cubeType or (rarities[cubeType.Rarity] or 0) < (rarities[definition.RequiredCubeRarity or "Epic"] or 4) then
+				payoutMultiplier = 1
+			end
+		end
+		local payout = math.min(self.maxItemValue, math.max(0.01, math.floor(item.Value * payoutMultiplier * 100 + 0.5) / 100))
+		self.coins = math.min(self.coins + payout, self.maxItemValue)
+		self.totalValueSold = math.min(self.totalValueSold + payout, self.maxItemValue)
 		self.soldItems += 1
 		return true
 	end
@@ -200,8 +258,11 @@ end
 function FactorySimulation:_advanceItem(item: Item, deltaTime: number): boolean
 	item.TimeRemaining -= deltaTime
 	while item.TimeRemaining <= 1e-9 do
-		if self:_processItemAtSlot(item) then
+		local consumed = self:_processItemAtSlot(item)
+		if consumed == true then
 			return true
+		elseif consumed == nil then
+			return false
 		end
 
 		item.SlotIndex += 1
@@ -305,9 +366,12 @@ function FactorySimulation:getActiveItemsForDebug(): { Item }
 			SlotIndex = item.SlotIndex,
 			TimeRemaining = item.TimeRemaining,
 			SourceMachineId = item.SourceMachineId,
+			CubeType = item.CubeType,
 			VisualState = item.VisualState,
 			SizeScale = item.SizeScale,
 			TravelScale = item.TravelScale,
+			SellerProcessingStarted = item.SellerProcessingStarted,
+			SaleDueAt = item.SaleDueAt,
 		}
 	end
 	return result

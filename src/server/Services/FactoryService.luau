@@ -9,6 +9,7 @@ local FactoryConfig = require(Shared:WaitForChild("FactoryConfig"))
 local FactoryLayout = require(Shared:WaitForChild("FactoryLayout"))
 local FactorySimulation = require(Shared:WaitForChild("FactorySimulation"))
 local MachineDefinitions = require(Shared:WaitForChild("MachineDefinitions"))
+local CubeTypeDefinitions = require(Shared:WaitForChild("CubeTypeDefinitions"))
 local PlacementRules = require(Shared:WaitForChild("PlacementRules"))
 local AnalyticsService = require(script.Parent.AnalyticsService)
 local EffectService = require(script.Parent.EffectService)
@@ -162,8 +163,10 @@ local function updateVisualItems(factory: any)
 			visual = createPart(factory.plot, `Item_{item.Id}`, Vector3.new(0.9, 0.9, 0.9), factory.origin + Vector3.new(0, 1, 0), Color3.fromRGB(235, 235, 235))
 			factory.visualItems[item.Id] = visual
 		end
+		local cubeType = CubeTypeDefinitions.get(item.CubeType)
+		local cubeColor = cubeType and cubeType.Color
 		local stateColors = {
-			Base = Color3.fromRGB(235, 235, 235),
+			Base = if cubeColor then Color3.fromRGB(cubeColor[1], cubeColor[2], cubeColor[3]) else Color3.fromRGB(235, 235, 235),
 			Painted = Color3.fromRGB(255, 105, 160),
 			Golden = Color3.fromRGB(255, 211, 66),
 		}
@@ -183,6 +186,7 @@ local function updateVisualItems(factory: any)
 		local x = (visualSlotIndex - 1) * 6 + progress * 6
 		visual.Position = factory.origin + Vector3.new(x, 1.05, 0)
 		visual:SetAttribute("ItemValue", item.Value)
+		visual:SetAttribute("CubeType", item.CubeType)
 	end
 
 	for itemId, visual in pairs(factory.visualItems) do
@@ -251,9 +255,6 @@ local function placeMachine(player: Player, machineId: any, slotIndex: any, repl
 	local previousMachineId = factory.layout[slotIndex]
 	if previousMachineId and replaceRequested ~= true then
 		return buildResponse(factory, false, "Slot is occupied")
-	end
-	if previousMachineId and slotIndex == FactoryLayout.SlotCount then
-		return buildResponse(factory, false, "The seller is fixed infrastructure")
 	end
 	if (factory.inventory[machineId] or 0) <= 0 then
 		return buildResponse(factory, false, "Machine is not in inventory")

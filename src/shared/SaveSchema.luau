@@ -55,7 +55,7 @@ function SaveSchema.sanitize(raw: any): { [string]: any }
 	local safe = defaultData()
 
 	if type(source.Coins) == "number" and source.Coins == source.Coins and source.Coins >= 0 then
-		safe.Coins = math.min(math.floor(source.Coins), FactoryConfig.MaxItemValue)
+		safe.Coins = math.min(math.floor(source.Coins * 100 + 0.5) / 100, FactoryConfig.MaxItemValue)
 	end
 	if type(source.Capacity) == "number" and source.Capacity % 1 == 0 then
 		safe.Capacity = math.clamp(source.Capacity, 1, FactoryConfig.MaxFactoryCapacity)

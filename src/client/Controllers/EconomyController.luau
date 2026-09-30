@@ -195,21 +195,57 @@ function EconomyController.start()
 		capacity.Text = if state.CapacityCost then `Buy capacity · {state.CapacityCost} Coins` else "Capacity MAX"
 		clearDynamicChildren(inventoryList)
 		local count = 0
+		local inventory = {}
+		local categoryOrder = { Producer = 1, Processor = 2, Seller = 3 }
 		for machineId, quantity in pairs(state.Inventory or {}) do
 			if quantity > 0 then
-				count += 1
 				local definition = MachineDefinitions.get(machineId)
-				local button = createButton(inventoryList, `Sell_{machineId}`, `Recycle {definition and definition.DisplayName or machineId} ×{quantity}`)
-				button.Size = UDim2.new(1, -6, 0, if compact then 28 else 32)
-				button.TextXAlignment = Enum.TextXAlignment.Left
-				button.Activated:Connect(function()
-					local response = invoke(sellMachine, machineId, 1)
-					if response and response.Success then
-						setStatus(`Recycled one {definition and definition.DisplayName or machineId}.`, true)
-						refresh(response)
-					end
-				end)
+				table.insert(inventory, { Id = machineId, Quantity = quantity, Definition = definition })
 			end
+		end
+		table.sort(inventory, function(left, right)
+			local leftCategory = left.Definition and left.Definition.Category or "Processor"
+			local rightCategory = right.Definition and right.Definition.Category or "Processor"
+			local leftOrder = categoryOrder[leftCategory] or 2
+			local rightOrder = categoryOrder[rightCategory] or 2
+			if leftOrder ~= rightOrder then return leftOrder < rightOrder end
+			local leftName = left.Definition and left.Definition.DisplayName or left.Id
+			local rightName = right.Definition and right.Definition.DisplayName or right.Id
+			return leftName < rightName
+		end)
+		local previousCategory = ""
+		for _, entry in ipairs(inventory) do
+			local machineId = entry.Id
+			local quantity = entry.Quantity
+			local definition = entry.Definition
+			local category = definition and definition.Category or "Processor"
+			if category ~= previousCategory then
+				previousCategory = category
+				local heading = Instance.new("TextLabel")
+				heading.Name = `Section_{category}`
+				heading.BackgroundTransparency = 1
+				heading.Text = if category == "Producer" then "DROPPERS" elseif category == "Seller" then "SELLERS" else "UPGRADERS"
+				heading.TextColor3 = COLORS.Accent
+				heading.Font = Enum.Font.GothamBold
+				heading.TextSize = 10
+				heading.TextXAlignment = Enum.TextXAlignment.Left
+				heading.Size = UDim2.new(1, -6, 0, 16)
+				heading.Parent = inventoryList
+			end
+			count += 1
+			local chance = state.RollChances and state.RollChances[machineId]
+			local chanceText = if type(chance) == "number" then string.format(" · %.3f%% roll", chance) else ""
+			local button = createButton(inventoryList, `Sell_{machineId}`, `Recycle {definition and definition.DisplayName or machineId} ×{quantity}{chanceText}`)
+			button.Size = UDim2.new(1, -6, 0, if compact then 34 else 32)
+			button.TextSize = 11
+			button.TextXAlignment = Enum.TextXAlignment.Left
+			button.Activated:Connect(function()
+				local response = invoke(sellMachine, machineId, 1)
+				if response and response.Success then
+					setStatus(`Recycled one {definition and definition.DisplayName or machineId}.`, true)
+					refresh(response)
+				end
+			end)
 		end
 		if count == 0 then
 			local empty = Instance.new("TextLabel")
@@ -235,7 +271,8 @@ function EconomyController.start()
 		local response = invoke(rollMachine)
 		if response and response.Success then
 			local definition = response.LastRoll and MachineDefinitions.get(response.LastRoll)
-			result.Text = `Rolled: {definition and definition.DisplayName or response.LastRoll or "Machine"} ({response.LastRarity or "Unknown"})`
+			local rollChance = if type(response.LastRollChance) == "number" then string.format("%.3f%%", response.LastRollChance) else "odds unavailable"
+			result.Text = `Rolled: {definition and definition.DisplayName or response.LastRoll or "Machine"} ({response.LastRarity or "Unknown"}) · {rollChance}`
 			setStatus("Machine added to inventory.", true)
 			refresh(response)
 			EffectsController.play("MachineRolled", { MachineId = response.LastRoll, Rarity = response.LastRarity })
@@ -275,6 +312,7 @@ function EconomyController.start()
 		status.Size = UDim2.new(1, -16, 0, if compact then 34 else 24)
 		result.Position = UDim2.fromOffset(8, if compact then 70 else 62)
 		result.Size = UDim2.new(1, -16, 0, if compact then 20 else 24)
+		result.TextSize = if compact then 10 else 12
 		capacity.Position = UDim2.fromOffset(8, if compact then 94 else 130)
 		capacity.Size = UDim2.fromOffset(panelWidth - 16, if compact then 38 else 34)
 		rollDock.Size = UDim2.fromOffset(if compact then math.min(268, viewportWidth - 24) else 320, 72)

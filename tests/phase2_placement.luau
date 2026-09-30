@@ -26,6 +26,11 @@ local invalidSeller = { "BasicDropper", "Seller", nil, nil, "Seller" }
 local sellerValid = PlacementRules.validateLayout(invalidSeller)
 expect(not sellerValid, "seller cannot occupy a processor slot")
 
+local alternateSellerValid, alternateSellerError = PlacementRules.validateMachineForSlot("PremiumAppraiser", 5)
+expect(alternateSellerValid, alternateSellerError or "a rolled seller should be installable in the seller slot")
+local alternateSellerLayoutValid, alternateSellerLayoutError = PlacementRules.validateLayout({ "BasicDropper", nil, nil, nil, "PremiumAppraiser" })
+expect(alternateSellerLayoutValid, alternateSellerLayoutError or "an alternate seller should satisfy the factory route")
+
 local invalidIndex = PlacementRules.validateSlotIndex(6)
 expect(not invalidIndex, "out-of-range slots must be rejected")
 

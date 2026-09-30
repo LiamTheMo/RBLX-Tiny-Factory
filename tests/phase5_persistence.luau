@@ -58,6 +58,8 @@ expect(invalidLayout.Layout[1] == FactoryLayout.Default[1], "invalid layouts mus
 local migrated = SaveSchema.sanitize({ Coins = 7, RollCount = 2 })
 expect(migrated.SchemaVersion == SaveSchema.CurrentVersion, "legacy data must migrate to the current schema")
 expect(migrated.Coins == 7 and migrated.RollCount == 2, "legacy values should be retained when valid")
+local fractionalCoins = SaveSchema.sanitize({ Coins = 5.75 })
+expect(fractionalCoins.Coins == 5.75, "two-decimal cube value payouts must survive persistence")
 
 local future = SaveSchema.sanitize({ SchemaVersion = SaveSchema.CurrentVersion + 1, Coins = 999 })
 expect(future.Coins == 0, "future schema data must not be trusted")

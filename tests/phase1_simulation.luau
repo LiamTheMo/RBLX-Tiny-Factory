@@ -21,16 +21,16 @@ local simulation = FactorySimulation.new({
 	MaxActiveItems = 24,
 })
 
-for _ = 1, 8 do
+for _ = 1, 12 do
 	simulation:step(0.25)
 end
 
 local snapshot = simulation:getSnapshot()
-expect(snapshot.ProducedItems == 3, "expected three produced items after two seconds")
-expect(snapshot.SoldItems == 2, "expected two items to reach the seller")
-expect(snapshot.Coins == 4, "the multiplier should double each sold item value")
-expect(snapshot.ProcessedItems == 2, "expected two processed items")
-expect(snapshot.ActiveItems == 1, "the third item should still be in the route")
+expect(snapshot.ProducedItems == 4, "expected four produced items after three seconds")
+expect(snapshot.SoldItems == 2, "expected two items to complete the seller's processing cycle")
+expect(snapshot.Coins == 20, "the multiplier should double each five-coin standard item")
+expect(snapshot.ProcessedItems == 3, "items should be counted when they pass through the processor")
+expect(snapshot.ActiveItems == 2, "the next item and an item at the seller should remain active")
 
 local capped = FactorySimulation.new({
 	SpawnIntervalSeconds = 0.1,
@@ -49,7 +49,7 @@ expect(not invalidType, "non-numeric timing must be rejected")
 
 local firstFactory = FactorySimulation.new()
 local secondFactory = FactorySimulation.new()
-firstFactory:step(2)
+for _ = 1, 12 do firstFactory:step(0.25) end
 secondFactory:step(0.5)
 local firstSnapshot = firstFactory:getSnapshot()
 local secondSnapshot = secondFactory:getSnapshot()
