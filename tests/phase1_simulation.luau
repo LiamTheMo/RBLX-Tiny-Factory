@@ -10,6 +10,14 @@ local function expect(condition: boolean, message: string)
 	end
 end
 
+local function confirmSellerHitboxContacts(simulation: any)
+	for _, item in ipairs(simulation:getActiveItemsForDebug()) do
+		if item.ReadyForSale then
+			simulation:sellItem(item.Id, { AdditiveBonus = 0, Multiplier = 1 })
+		end
+	end
+end
+
 local valid, configurationError = FactorySimulation.validateConfiguration()
 expect(valid, configurationError or "default configuration is invalid")
 
@@ -24,6 +32,7 @@ local simulation = FactorySimulation.new({
 
 for _ = 1, 8 do
 	simulation:step(0.25)
+	confirmSellerHitboxContacts(simulation)
 end
 
 local snapshot = simulation:getSnapshot()
@@ -51,7 +60,9 @@ expect(not invalidType, "non-numeric timing must be rejected")
 local firstFactory = FactorySimulation.new()
 local secondFactory = FactorySimulation.new()
 firstFactory:step(FactoryConfig.TravelTimePerSlotSeconds * 3 + 1)
+confirmSellerHitboxContacts(firstFactory)
 secondFactory:step(0.5)
+confirmSellerHitboxContacts(secondFactory)
 local firstSnapshot = firstFactory:getSnapshot()
 local secondSnapshot = secondFactory:getSnapshot()
 expect(firstSnapshot.Coins ~= secondSnapshot.Coins, "factories must simulate independently")

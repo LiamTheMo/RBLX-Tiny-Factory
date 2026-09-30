@@ -12,6 +12,11 @@ end
 
 export type MachineCategory = "Producer" | "Processor" | "Seller"
 
+export type ValueModifierLayer = {
+	AdditiveBonus: number?,
+	Multiplier: number?,
+}
+
 type MachineDefinitionSource = {
 	Id: string,
 	DisplayName: string,
@@ -23,6 +28,9 @@ type MachineDefinitionSource = {
 	Behavior: string?,
 	SpawnInterval: number?,
 	OutputValue: number?,
+	OutputType: string?,
+	TypeModifiers: ValueModifierLayer?,
+	SaleModifiers: ValueModifierLayer?,
 	Multiplier: number?,
 	SizeScale: number?,
 	VisualState: string?,
@@ -45,6 +53,8 @@ local definitionSources: { [string]: MachineDefinitionSource } = {
 		Rollable = false,
 		SpawnInterval = 1,
 		OutputValue = 1,
+		OutputType = "Standard",
+		TypeModifiers = { AdditiveBonus = 0, Multiplier = 1 },
 	},
 	ValueMultiplier = {
 		Id = "ValueMultiplier",
@@ -65,6 +75,7 @@ local definitionSources: { [string]: MachineDefinitionSource } = {
 		Rollable = true,
 		RollChance = 2,
 		VisualStyle = "Seller",
+		SaleModifiers = { AdditiveBonus = 0, Multiplier = 1 },
 	},
 	FastDropper = {
 		Id = "FastDropper",
@@ -76,6 +87,8 @@ local definitionSources: { [string]: MachineDefinitionSource } = {
 		RollChance = 5,
 		SpawnInterval = 0.5,
 		OutputValue = 1,
+		OutputType = "Standard",
+		TypeModifiers = { AdditiveBonus = 0, Multiplier = 1 },
 	},
 	HeavyDropper = {
 		Id = "HeavyDropper",
@@ -87,6 +100,8 @@ local definitionSources: { [string]: MachineDefinitionSource } = {
 		RollChance = 1.5,
 		SpawnInterval = 1.8,
 		OutputValue = 4,
+		OutputType = "Standard",
+		TypeModifiers = { AdditiveBonus = 0, Multiplier = 1 },
 	},
 	Giantifier = {
 		Id = "Giantifier",
@@ -207,6 +222,19 @@ function MachineDefinitions.getRollPool(): { MachineDefinition }
 	return result
 end
 
+local function validValueModifiers(modifiers: any): boolean
+	if type(modifiers) ~= "table" then
+		return false
+	end
+	local additiveBonus = modifiers.AdditiveBonus
+	local multiplier = modifiers.Multiplier
+	local additiveValid = additiveBonus == nil
+		or (type(additiveBonus) == "number" and additiveBonus == additiveBonus and additiveBonus >= 0 and additiveBonus < math.huge)
+	local multiplierValid = multiplier == nil
+		or (type(multiplier) == "number" and multiplier == multiplier and multiplier > 0 and multiplier < math.huge)
+	return additiveValid and multiplierValid
+end
+
 function MachineDefinitions.validate(): (boolean, string?)
 	local producerCount = 0
 	local sellerCount = 0
@@ -257,6 +285,9 @@ function MachineDefinitions.validate(): (boolean, string?)
 			if not definition.OutputValue or definition.OutputValue <= 0 then
 				return false, `Producer {machineId} must have a positive output value`
 			end
+			if type(definition.OutputType) ~= "string" or definition.OutputType == "" or not validValueModifiers(definition.TypeModifiers) then
+				return false, `Producer {machineId} needs an output type with valid value modifiers`
+			end
 		elseif definition.Category == "Processor" then
 			local behavior = definition.Behavior
 			if behavior == "MultiplyValue" or behavior == "Goldenize" then
@@ -280,6 +311,9 @@ function MachineDefinitions.validate(): (boolean, string?)
 			end
 		elseif definition.Category == "Seller" then
 			sellerCount += 1
+			if not validValueModifiers(definition.SaleModifiers) then
+				return false, `Seller {machineId} needs valid sale modifiers`
+			end
 		else
 			return false, `Machine {machineId} has an unsupported category`
 		end
