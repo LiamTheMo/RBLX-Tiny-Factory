@@ -85,6 +85,8 @@ local function getClientState(player: Player): { [string]: any }
 		RollCost = rollCost,
 		RollCooldownSeconds = EconomyConfig.RollCooldownSeconds,
 		RollCooldownRemaining = EconomyRules.getRollCooldownRemaining(profile.NextRollAt, os.clock()),
+		RollChances = EconomyRules.getMachineRollChances(EconomyConfig.RarityWeights, MachineDefinitions.getRollPool()),
+		LastRollChance = profile.LastRollChance,
 		DataReady = dataIsReady(player),
 		DataError = player:GetAttribute("FactoryDataError"),
 		CapacityCost = capacityCost,
@@ -102,19 +104,16 @@ local function chooseRarity(): string?
 end
 
 local function chooseMachine(rarity: string?): any?
-	local candidates = {}
-	for _, definition in ipairs(MachineDefinitions.getRollPool()) do
-		if not rarity or definition.Rarity == rarity then
-			table.insert(candidates, definition)
-		end
-	end
-	if #candidates == 0 then
-		candidates = MachineDefinitions.getRollPool()
-	end
+	local candidates = MachineDefinitions.getRollPool(rarity)
 	if #candidates == 0 then
 		return nil
 	end
-	return candidates[random:NextInteger(1, #candidates)]
+	local weights = {}
+	for _, definition in ipairs(candidates) do weights[definition.Id] = definition.RollWeight or 0 end
+	local totalWeight = 0
+	for _, weight in pairs(weights) do totalWeight += weight end
+	local chosenId = EconomyRules.weightedPick(weights, random:NextNumber(0, totalWeight))
+	return if chosenId then MachineDefinitions.get(chosenId) else nil
 end
 
 local function response(player: Player, success: boolean, reason: string?): { [string]: any }
@@ -155,6 +154,7 @@ local function rollMachine(player: Player)
 	state.inventory[definition.Id] = (state.inventory[definition.Id] or 0) + 1
 	profile.RollCount += 1
 	profile.NextRollAt = now + EconomyConfig.RollCooldownSeconds
+	profile.LastRollChance = EconomyRules.getMachineRollChances(EconomyConfig.RarityWeights, MachineDefinitions.getRollPool())[definition.Id] or 0
 	player:SetAttribute("FactoryLastRoll", definition.Id)
 	player:SetAttribute("FactoryLastRarity", definition.Rarity)
 	AnalyticsService.record(player, "MachineRolled")

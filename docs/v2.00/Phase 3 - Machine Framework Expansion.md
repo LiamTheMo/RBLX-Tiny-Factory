@@ -56,6 +56,32 @@ Stable branched logistics.
 - representative interaction matrix
 - production upper-bound simulations
 
+## Current roll and cube catalog contract
+
+The machine roll is a server-owned nested weighted draw:
+
+1. `EconomyConfig.RarityWeights` selects a rarity.
+2. Only rollable machines in that rarity are eligible; their `RollWeight`
+   values select the machine.
+
+The exact whole-roll chance is the rarity chance multiplied by the machine's
+share of its rarity's inner weight. The server returns those computed odds for
+the inventory and roll result UI. Do not treat the inner weight as an additional
+rarity or run the two selections from the client.
+
+`CubeTypeDefinitions` is the source of truth for cube names, type rarity,
+display color, and base value multiplier. It currently defines Standard, Wet,
+Air, Nature, Earth, Fire, Ice, Metal, Lightning, Light, Shadow, Time, Crystal,
+and Rainbow cubes. Producer spawn intervals and base values, type-filtered
+upgrader multipliers, and seller payout rules live in `MachineDefinitions`.
+The simulation applies cube type value first, then matching route upgraders,
+then the terminal seller's rule. Monetary payouts retain two decimal places.
+
+The catalog includes rollable producers, upgraders, and alternate sellers.
+Inventory is grouped by category; alternate sellers are only valid in the
+terminal seller slot. Machine odds and all money changes are calculated by the
+server. Treat the supplied numbers as first-pass balance values for playtesting.
+
 ## Manual Validation
 - Strategy diversity
 - readability of new machines

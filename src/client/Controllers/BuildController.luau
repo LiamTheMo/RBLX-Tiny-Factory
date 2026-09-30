@@ -226,21 +226,53 @@ function BuildController.start()
 		clearDynamicChildren(slotsList)
 
 		local inventoryCount = 0
+		local entries = {}
 		for machineId, quantity in pairs(state.Inventory or {}) do
 			if quantity > 0 then
 				inventoryCount += 1
 				local definition = MachineDefinitions.get(machineId)
-				local button = createButton(inventoryList, `Machine_{machineId}`, `{definition and definition.DisplayName or machineId} ×{quantity}`)
-				button.Size = UDim2.new(1, -8, 0, if compact then 30 else 34)
-				button.TextXAlignment = Enum.TextXAlignment.Left
-				button:SetAttribute("Description", definition and definition.Description or "")
-				if selectedMachine == machineId then
-					button.BackgroundColor3 = COLORS.Selected
-				end
-				button.Activated:Connect(function()
-					selectMachine(machineId)
-				end)
+				table.insert(entries, { Id = machineId, Quantity = quantity, Definition = definition })
 			end
+		end
+		local categoryOrder = { Producer = 1, Processor = 2, Seller = 3 }
+		table.sort(entries, function(left, right)
+			local leftCategory = left.Definition and left.Definition.Category or "Processor"
+			local rightCategory = right.Definition and right.Definition.Category or "Processor"
+			local leftOrder = categoryOrder[leftCategory] or 2
+			local rightOrder = categoryOrder[rightCategory] or 2
+			if leftOrder ~= rightOrder then return leftOrder < rightOrder end
+			local leftName = left.Definition and left.Definition.DisplayName or left.Id
+			local rightName = right.Definition and right.Definition.DisplayName or right.Id
+			return leftName < rightName
+		end)
+		local previousCategory = ""
+		for _, entry in ipairs(entries) do
+			local machineId = entry.Id
+			local definition = entry.Definition
+			local category = definition and definition.Category or "Processor"
+			if category ~= previousCategory then
+				previousCategory = category
+				local heading = Instance.new("TextLabel")
+				heading.Name = `Section_{category}`
+				heading.BackgroundTransparency = 1
+				heading.Text = if category == "Producer" then "DROPPERS" elseif category == "Seller" then "SELLERS" else "UPGRADERS"
+				heading.TextColor3 = COLORS.Accent
+				heading.Font = Enum.Font.GothamBold
+				heading.TextSize = 10
+				heading.TextXAlignment = Enum.TextXAlignment.Left
+				heading.Size = UDim2.new(1, -8, 0, 16)
+				heading.Parent = inventoryList
+			end
+			local button = createButton(inventoryList, `Machine_{machineId}`, `{definition and definition.DisplayName or machineId} ×{entry.Quantity}`)
+			button.Size = UDim2.new(1, -8, 0, if compact then 30 else 34)
+			button.TextXAlignment = Enum.TextXAlignment.Left
+			button:SetAttribute("Description", definition and definition.Description or "")
+			if selectedMachine == machineId then
+				button.BackgroundColor3 = COLORS.Selected
+			end
+			button.Activated:Connect(function()
+				selectMachine(machineId)
+			end)
 		end
 		if inventoryCount == 0 then
 			local empty = Instance.new("TextLabel")
