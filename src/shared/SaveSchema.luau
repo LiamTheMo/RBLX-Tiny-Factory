@@ -14,7 +14,7 @@ local PlacementRules = requireSibling("PlacementRules")
 local BoosterRules = requireSibling("BoosterRules")
 
 local SaveSchema = {}
-SaveSchema.CurrentVersion = 3
+SaveSchema.CurrentVersion = 4
 
 local function defaultData(): { [string]: any }
 	return {
@@ -102,6 +102,30 @@ function SaveSchema.migrate(raw: any): { [string]: any }
 		end
 		migrated.BoosterInventory = migrated.BoosterInventory or {}
 		migrated.SchemaVersion = 3
+		version = 3
+	end
+	if version == 3 then
+		local legacyLayout = migrated.Layout
+		if type(legacyLayout) == "table" then
+			local legacySellerSlot: number? = nil
+			for slotIndex = 1, FactoryLayout.SellerSlotIndex - 1 do
+				local definition = MachineDefinitions.get(legacyLayout[slotIndex])
+				if definition and definition.Category == "Seller" then
+					legacySellerSlot = slotIndex
+					break
+				end
+			end
+			if legacySellerSlot then
+				local updatedLayout = table.clone(legacyLayout)
+				updatedLayout[FactoryLayout.SellerSlotIndex] = legacyLayout[legacySellerSlot]
+				updatedLayout[legacySellerSlot] = nil
+				migrated.Layout = updatedLayout
+			end
+		end
+		if type(migrated.Capacity) == "number" then
+			migrated.Capacity = math.clamp(migrated.Capacity, 1, FactoryConfig.MaxFactoryCapacity)
+		end
+		migrated.SchemaVersion = 4
 	end
 	return migrated
 end
