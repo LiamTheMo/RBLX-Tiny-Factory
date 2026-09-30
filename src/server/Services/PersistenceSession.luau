@@ -26,7 +26,7 @@ function PersistenceSession.save(store: any, key: string, sessionId: string, dat
 	local ok, record = pcall(function()
 		return store:UpdateAsync(key, function(old: any)
 			local owner = if type(old) == "table" then old._SessionId else nil
-			if owner ~= nil and owner ~= sessionId then
+			if owner ~= sessionId then
 				conflict = true
 				return nil
 			end
