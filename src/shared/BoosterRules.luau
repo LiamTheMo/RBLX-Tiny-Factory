@@ -69,6 +69,7 @@ function BoosterRules.validate(): (boolean, string?)
 		or type(BoosterConfig.MaxActiveDropsWorldwide) ~= "number" or BoosterConfig.MaxActiveDropsWorldwide < 1
 		or type(BoosterConfig.DespawnAfterSeconds) ~= "number" or BoosterConfig.DespawnAfterSeconds <= 0
 		or type(BoosterConfig.MaxLuckDurationSeconds) ~= "number" or BoosterConfig.MaxLuckDurationSeconds < 1
+		or type(BoosterConfig.MaxSaleValueDurationSeconds) ~= "number" or BoosterConfig.MaxSaleValueDurationSeconds < 1
 		or type(BoosterConfig.MaxStoredPerType) ~= "number" or BoosterConfig.MaxStoredPerType % 1 ~= 0 or BoosterConfig.MaxStoredPerType < 1 then
 		return false, "Booster spawn limits must be positive"
 	end
@@ -116,9 +117,12 @@ function BoosterRules.validate(): (boolean, string?)
 		local effect = definition.Effect
 		if type(effect) ~= "table" then
 			return false, "Each booster needs an effect"
-		elseif effect.Kind == "Coins" then
-			if type(effect.Amount) ~= "number" or effect.Amount % 1 ~= 0 or effect.Amount < 1 or effect.Amount > 100000 then
-				return false, "Coin booster amounts must be bounded positive integers"
+		elseif effect.Kind == "SaleValue" then
+			local additiveBonus = effect.AdditiveBonus or 0
+			if type(additiveBonus) ~= "number" or additiveBonus ~= additiveBonus or additiveBonus < 0 or additiveBonus == math.huge
+				or type(effect.Multiplier) ~= "number" or effect.Multiplier ~= effect.Multiplier or effect.Multiplier < 1 or effect.Multiplier > EconomyConfig.MaxSaleValueMultiplier
+				or type(effect.DurationSeconds) ~= "number" or effect.DurationSeconds ~= effect.DurationSeconds or effect.DurationSeconds < 1 or effect.DurationSeconds > BoosterConfig.MaxSaleValueDurationSeconds then
+				return false, "Sale-value booster strength or duration is outside configured limits"
 			end
 		elseif effect.Kind == "Luck" then
 			if type(effect.Multiplier) ~= "number" or effect.Multiplier < 1 or effect.Multiplier > EconomyConfig.MaxLuckMultiplier
