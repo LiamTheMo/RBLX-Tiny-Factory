@@ -25,4 +25,4 @@ default.project.json includes Workspace and src/workspace. The baseplate and spa
 
 Raw .obj files are source art, not Rojo place instances. Roblox Studio's Importer accepts OBJ, while Roblox Open Cloud Model uploads accept FBX, GLTF, and GLB. For a Git-managed custom model, import it in Studio and commit its Roblox model export, or convert OBJ to GLB and use a separately validated asset-upload step. Mesh assets still need Roblox ownership, moderation, and usable IDs. The current prototype does not load the optional 3D showcase or require imported custom models to publish.
 
-The GitHub workflow validates pull requests and version-branch pushes, but builds/publishes only from main. Publishing needs the existing ROBLOX_API_KEY, ROBLOX_UNIVERSE_ID, and ROBLOX_PLACE_ID secrets.
+The GitHub workflow validates only pushes to `main` and permanent major branches named `vX.XX`; it does not run jobs for pull requests or temporary/minor branches. Manual dispatch jobs are gated to `main`. Version-branch pushes validate only, while `main` pushes validate and publish. Publishing needs the existing ROBLOX_API_KEY, ROBLOX_UNIVERSE_ID, and ROBLOX_PLACE_ID secrets.

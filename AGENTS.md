@@ -47,15 +47,28 @@ The major branches are permanent checkpoints. Only `main` and branches named
 3. Create a descriptive temporary/minor branch for every change. Never develop
    directly on `main` or a `vX.XX` branch.
 4. Implement one coherent change set on the temporary branch.
-5. Validate with the relevant tests, compilers, build checks, security checks,
-   and manual checklist.
-6. Review the diff and any CI/review findings, fix actionable issues, and
+5. Run the relevant tests, compilers, build checks, security checks, and
+   manual checklist locally on the temporary branch.
+6. Review the diff and local validation results, fix actionable issues, and
    revalidate.
 7. Commit and push the temporary branch, open a pull request into its origin
-   major branch, and merge it only after validation.
-8. Push the updated major branch.
+   major branch, and merge it only after local validation and diff review.
+8. The merge push to the major branch triggers its GitHub Actions validation.
+   Resolve any failure before integrating that major version into `main`.
 9. Merge the completed major branch into `main` only when the release/version is
-   intended for integration or deployment.
+   intended for integration or deployment. The `main` push validates and
+   publishes under the deployment policy.
+
+
+### GitHub Actions branch policy
+
+The Tiny Factory Actions workflow runs validation on pushes to `main` and
+permanent major branches named `vX.XX`. Pull request events and temporary or
+minor branches do not start Actions jobs. Keep the workflow branch filter
+specific to those major branch names; do not add a `pull_request` trigger or
+broaden it to arbitrary refs. Manual dispatch jobs are gated to `main`, where
+the optional publish path is available. Version-branch pushes validate only;
+`main` pushes validate and publish.
 
 Deployment is allowed only from `main` under the repository's deployment policy.
 Do not publish from temporary or version branches. Never delete a completed
