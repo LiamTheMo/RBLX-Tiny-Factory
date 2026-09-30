@@ -11,6 +11,7 @@ end
 local defaultData = SaveSchema.default()
 expect(defaultData.SchemaVersion == SaveSchema.CurrentVersion, "default data must use the current schema")
 expect(defaultData.Capacity == 1, "default capacity should be one")
+expect(type(defaultData.BoosterInventory) == "table", "default booster inventory must be present")
 expect(type(defaultData.Analytics) == "table", "default data must include bounded analytics storage")
 expect(defaultData.Layout[1] == FactoryLayout.Default[1], "default producer must be persisted")
 expect(defaultData.Layout[4] == FactoryLayout.Default[4], "default seller must be persisted in area four")
@@ -19,6 +20,7 @@ local safe = SaveSchema.sanitize({
 	Coins = 9_999_999_999,
 	Capacity = 99,
 	RollCount = 4,
+	BoosterInventory = { Coin = 200, Luck = 2, Unknown = 10, Negative = -1 },
 	Inventory = {
 		FastDropper = 5,
 		BasicDropper = 100,
@@ -39,6 +41,7 @@ local safe = SaveSchema.sanitize({
 expect(safe.Coins == FactoryConfig.MaxItemValue, "coins must be capped during sanitization")
 expect(safe.Capacity == FactoryConfig.MaxFactoryCapacity, "capacity must be capped during sanitization")
 expect(safe.RollCount == 4, "valid roll count should survive sanitization")
+expect(safe.BoosterInventory.Coin == 99 and safe.BoosterInventory.Luck == 2 and safe.BoosterInventory.Unknown == nil, "booster counts should be bounded and known")
 expect(safe.Inventory.FastDropper == 5, "valid rollable inventory should survive sanitization")
 expect(safe.Inventory.BasicDropper == nil, "non-rollable machines must not enter inventory")
 expect(safe.Inventory.NotAMachine == nil, "unknown machines must not enter inventory")
@@ -66,10 +69,19 @@ local migratedFiveAreaSave = SaveSchema.sanitize({
 	Inventory = {},
 	Layout = { "BasicDropper", "Giantifier", "ValueMultiplier", "CooldownTuner", "Seller" },
 })
-expect(migratedFiveAreaSave.SchemaVersion == 2, "five-area saves must advance to the four-area schema")
+expect(migratedFiveAreaSave.SchemaVersion == 3, "five-area saves must advance to the four-area schema")
 expect(migratedFiveAreaSave.Capacity == FactoryConfig.MaxFactoryCapacity, "legacy capacity must be clamped to the new slot count")
 expect(migratedFiveAreaSave.Layout[4] == "Seller" and migratedFiveAreaSave.Layout[5] == nil, "legacy Seller must move into the fourth area")
 expect(migratedFiveAreaSave.Inventory.CooldownTuner == 1, "a processor displaced by the smaller conveyor must return to inventory")
+
+local migratedSeller = SaveSchema.sanitize({
+	SchemaVersion = 2,
+	Capacity = 2,
+	Inventory = { FastDropper = 1 },
+	Layout = { "BasicDropper", "ValueMultiplier", "Seller", nil },
+})
+expect(migratedSeller.Layout[3] == nil and migratedSeller.Layout[4] == "Seller", "old movable sellers must move to the seller bay")
+expect(migratedSeller.Inventory.FastDropper == 1 and next(migratedSeller.BoosterInventory) == nil, "migration should preserve owned machines and start with no boosters")
 
 local future = SaveSchema.sanitize({ SchemaVersion = SaveSchema.CurrentVersion + 1, Coins = 999 })
 expect(future.Coins == 0, "future schema data must not be trusted")

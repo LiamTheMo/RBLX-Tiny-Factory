@@ -95,6 +95,9 @@ expect(EconomyRules.getRollPoolTotalChance(EconomyRules.getLuckAdjustedRollPool(
 
 local boostersValid, boostersError = BoosterRules.validate()
 expect(boostersValid, boostersError or "booster config should validate")
+local boosterInventory = BoosterRules.sanitizeInventory({ Coin = 999, Luck = 2, Unknown = 10, Negative = -1 })
+expect(boosterInventory.Coin == BoosterConfig.MaxStoredPerType and boosterInventory.Luck == 2, "stored booster counts should be bounded")
+expect(boosterInventory.Unknown == nil and boosterInventory.Negative == nil, "unknown and invalid booster counts should be removed")
 local totalBoosterWeight = BoosterRules.getTotalSpawnWeight()
 expect(totalBoosterWeight >= 100, "starter booster weights should remain positive and extensible")
 expect(BoosterRules.pickBoosterId(0) == "Coin", "the first booster weight should resolve to Coins")

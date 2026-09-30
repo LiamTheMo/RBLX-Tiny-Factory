@@ -51,12 +51,25 @@ function BoosterRules.pickBoosterId(roll: any): string?
 	return nil
 end
 
+function BoosterRules.sanitizeInventory(raw: any): { [string]: number }
+	local result: { [string]: number } = {}
+	if type(raw) ~= "table" then return result end
+	for boosterId, quantity in pairs(raw) do
+		if BoosterRules.get(boosterId) and type(quantity) == "number" and quantity == quantity
+			and quantity % 1 == 0 and quantity > 0 then
+			result[boosterId] = math.min(quantity, BoosterConfig.MaxStoredPerType)
+		end
+	end
+	return result
+end
+
 function BoosterRules.validate(): (boolean, string?)
 	if type(BoosterConfig.SpawnIntervalSeconds) ~= "number" or BoosterConfig.SpawnIntervalSeconds <= 0
 		or type(BoosterConfig.MaxActiveDropsPerFactory) ~= "number" or BoosterConfig.MaxActiveDropsPerFactory < 1
 		or type(BoosterConfig.MaxActiveDropsWorldwide) ~= "number" or BoosterConfig.MaxActiveDropsWorldwide < 1
 		or type(BoosterConfig.DespawnAfterSeconds) ~= "number" or BoosterConfig.DespawnAfterSeconds <= 0
-		or type(BoosterConfig.MaxLuckDurationSeconds) ~= "number" or BoosterConfig.MaxLuckDurationSeconds < 1 then
+		or type(BoosterConfig.MaxLuckDurationSeconds) ~= "number" or BoosterConfig.MaxLuckDurationSeconds < 1
+		or type(BoosterConfig.MaxStoredPerType) ~= "number" or BoosterConfig.MaxStoredPerType % 1 ~= 0 or BoosterConfig.MaxStoredPerType < 1 then
 		return false, "Booster spawn limits must be positive"
 	end
 	local bounds = BoosterConfig.SpawnBounds

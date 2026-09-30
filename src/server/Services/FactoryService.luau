@@ -74,7 +74,7 @@ local function createConveyor(plot: Folder, origin: Vector3): Folder
 	local segmentLength = slotPitch + conveyorConfig.SegmentOverlap
 	local totalLength = (slotCount - 1) * slotPitch + segmentLength
 	local centerOffsetX = (slotCount - 1) * slotPitch / 2
-	local deckTop = conveyorConfig.DeckCenterY + conveyorConfig.DeckThickness / 2
+	local deckTop = conveyorConfig.DeckCenterY + conveyorConfig.DeckThickness / 2 + conveyorConfig.Elevation
 
 	local conveyor = Instance.new("Folder")
 	conveyor.Name = "Conveyor"
@@ -89,26 +89,27 @@ local function createConveyor(plot: Folder, origin: Vector3): Folder
 			conveyorConfig.FrameHeight,
 			conveyorConfig.BeltWidth + conveyorConfig.FrameWidthPadding
 		),
-		origin + Vector3.new(centerOffsetX, conveyorConfig.FrameCenterY, 0),
+		origin + Vector3.new(centerOffsetX, conveyorConfig.FrameCenterY + conveyorConfig.Elevation, 0),
 		colorFromRgb(conveyorConfig.FrameColor)
 	)
 	underframe.Material = Enum.Material.Metal
 
 	for slotIndex = 1, slotCount do
 		local offset = (slotIndex - 1) * slotPitch
+		local isSellerBay = slotIndex == FactoryLayout.SellerSlotIndex
 		local belt = createPart(
 			conveyor,
 			string.format("Conveyor_%d", slotIndex),
 			Vector3.new(segmentLength, conveyorConfig.DeckThickness, conveyorConfig.BeltWidth),
-			origin + Vector3.new(offset, conveyorConfig.DeckCenterY, 0),
-			colorFromRgb(conveyorConfig.DeckColor)
+			origin + Vector3.new(offset, conveyorConfig.DeckCenterY + conveyorConfig.Elevation, 0),
+			colorFromRgb(if isSellerBay then conveyorConfig.SellerBay.DeckColor else conveyorConfig.DeckColor)
 		)
 		belt.Material = Enum.Material.Rubber
 		addSlotClickDetector(belt, slotIndex)
 
 		for rollerIndex = 1, conveyorConfig.RollerCountPerSlot do
 			local rollerOffset = -slotPitch / 2 + ((rollerIndex - 0.5) * slotPitch / conveyorConfig.RollerCountPerSlot)
-			local rollerPosition = origin + Vector3.new(offset + rollerOffset, conveyorConfig.RollerCenterY, 0)
+			local rollerPosition = origin + Vector3.new(offset + rollerOffset, conveyorConfig.RollerCenterY + conveyorConfig.Elevation, 0)
 			local roller = createPart(
 				conveyor,
 				string.format("ConveyorRoller_%d_%d", slotIndex, rollerIndex),
@@ -148,7 +149,7 @@ local function createConveyor(plot: Folder, origin: Vector3): Folder
 					deckTop + conveyorConfig.GuideHeight - conveyorConfig.GuideAccentHeight / 2,
 					guideOffset
 				),
-				colorFromRgb(conveyorConfig.GuideAccentColor)
+				colorFromRgb(if isSellerBay then conveyorConfig.SellerBay.AccentColor else conveyorConfig.GuideAccentColor)
 			)
 			accent.Material = Enum.Material.Neon
 			addSlotClickDetector(accent, slotIndex)
@@ -157,8 +158,8 @@ local function createConveyor(plot: Folder, origin: Vector3): Folder
 				local support = createPart(
 					conveyor,
 					string.format("ConveyorSupport_%d_%d_%d", slotIndex, sideIndex, supportIndex),
-					Vector3.new(conveyorConfig.SupportThickness, conveyorConfig.SupportHeight, conveyorConfig.SupportThickness),
-					origin + Vector3.new(offset + supportOffset, conveyorConfig.SupportHeight / 2, guideOffset),
+					Vector3.new(conveyorConfig.SupportThickness, conveyorConfig.SupportHeight + conveyorConfig.Elevation, conveyorConfig.SupportThickness),
+					origin + Vector3.new(offset + supportOffset, (conveyorConfig.SupportHeight + conveyorConfig.Elevation) / 2, guideOffset),
 					colorFromRgb(conveyorConfig.SupportColor)
 				)
 				support.Material = Enum.Material.Metal
@@ -178,8 +179,8 @@ local function createConveyor(plot: Folder, origin: Vector3): Folder
 		areaText.Name = "Label"
 		areaText.BackgroundTransparency = 1
 		areaText.Size = UDim2.fromScale(1, 1)
-		areaText.Text = string.format("AREA %d", slotIndex)
-		areaText.TextColor3 = colorFromRgb(conveyorConfig.LabelColor)
+		areaText.Text = FactoryLayout.getAreaLabel(slotIndex)
+		areaText.TextColor3 = colorFromRgb(if isSellerBay then conveyorConfig.SellerBay.LabelColor else conveyorConfig.LabelColor)
 		areaText.TextSize = conveyorConfig.LabelTextSize
 		areaText.TextStrokeColor3 = colorFromRgb(conveyorConfig.FrameColor)
 		areaText.TextStrokeTransparency = 0.2
@@ -264,7 +265,7 @@ local function refreshMachineVisuals(factory: any)
 				local profile = MachineVisualConfig.Profiles[profileKey] or MachineVisualConfig.Profiles.Processor
 				local primaryColor = colorFromRgb(profile.PrimaryColor)
 				local accentColor = colorFromRgb(profile.AccentColor)
-				local machineLift = MachineVisualConfig.Conveyor.DeckCenterY + MachineVisualConfig.Conveyor.DeckThickness / 2 - MachineVisualConfig.MachineProfileBaseDeckTop
+				local machineLift = MachineVisualConfig.Conveyor.DeckCenterY + MachineVisualConfig.Conveyor.Elevation + MachineVisualConfig.Conveyor.DeckThickness / 2 - MachineVisualConfig.MachineProfileBaseDeckTop
 				local basePosition = factory.origin + Vector3.new((slotIndex - 1) * MachineVisualConfig.SlotPitch, machineLift, 0)
 				local model = Instance.new("Model")
 				model.Name = string.format("Slot_%d_%s", slotIndex, machineId)
@@ -350,7 +351,7 @@ local function updateVisualItems(factory: any)
 		activeById[item.Id] = true
 		local visual = factory.visualItems[item.Id]
 		if not visual then
-			visual = createPart(factory.plot, string.format("Item_%d", item.Id), Vector3.new(visualConfig.Size, visualConfig.Size, visualConfig.Size), factory.origin + Vector3.new(0, visualConfig.DropStartHeight, 0), Color3.fromRGB(235, 235, 235))
+			visual = createPart(factory.plot, string.format("Item_%d", item.Id), Vector3.new(visualConfig.Size, visualConfig.Size, visualConfig.Size), factory.origin + Vector3.new(0, visualConfig.DropStartHeight + MachineVisualConfig.Conveyor.Elevation, 0), Color3.fromRGB(235, 235, 235))
 			factory.visualItems[item.Id] = visual
 		end
 		local stateColors = {
@@ -365,21 +366,25 @@ local function updateVisualItems(factory: any)
 		local physicalSlotIndex = getPhysicalSlotForRouteIndex(factory.layout, item.SlotIndex)
 		local segmentProgress = 1 - math.clamp(item.TimeRemaining / FactoryConfig.TravelTimePerSlotSeconds, 0, 1)
 		local x = (physicalSlotIndex - 1) * MachineVisualConfig.SlotPitch
+		local nextPhysicalSlotIndex = getPhysicalSlotForRouteIndex(factory.layout, item.SlotIndex + 1)
+		local travelDistance = if nextPhysicalSlotIndex > physicalSlotIndex
+			then (nextPhysicalSlotIndex - physicalSlotIndex) * MachineVisualConfig.SlotPitch
+			else MachineVisualConfig.SlotPitch
 		local conveyorConfig = MachineVisualConfig.Conveyor
-		local deckTop = conveyorConfig.DeckCenterY + conveyorConfig.DeckThickness / 2
-		local rollerTop = conveyorConfig.RollerCenterY + conveyorConfig.RollerDiameter / 2
+		local deckTop = conveyorConfig.DeckCenterY + conveyorConfig.DeckThickness / 2 + conveyorConfig.Elevation
+		local rollerTop = conveyorConfig.RollerCenterY + conveyorConfig.RollerDiameter / 2 + conveyorConfig.Elevation
 		local landingHeight = math.max(deckTop, rollerTop) + size / 2 + visualConfig.LandingClearance
 		local y = landingHeight
 		if item.SlotIndex == 1 then
 			local fallFraction = math.clamp(visualConfig.DropDurationSeconds / FactoryConfig.TravelTimePerSlotSeconds, 0.05, 0.9)
 			local fallProgress = math.clamp(segmentProgress / fallFraction, 0, 1)
 			local easedFall = fallProgress * fallProgress * (3 - 2 * fallProgress)
-			y = visualConfig.DropStartHeight + (landingHeight - visualConfig.DropStartHeight) * easedFall
+			y = visualConfig.DropStartHeight + conveyorConfig.Elevation + (landingHeight - visualConfig.DropStartHeight - conveyorConfig.Elevation) * easedFall
 			if segmentProgress > fallFraction then
-				x += ((segmentProgress - fallFraction) / (1 - fallFraction)) * MachineVisualConfig.SlotPitch
+				x += ((segmentProgress - fallFraction) / (1 - fallFraction)) * travelDistance
 			end
 		else
-			x += segmentProgress * MachineVisualConfig.SlotPitch
+			x += segmentProgress * travelDistance
 		end
 		visual.Position = factory.origin + Vector3.new(x, y, 0)
 		visual:SetAttribute("ItemValue", item.Value)
@@ -560,6 +565,7 @@ local function createFactory(player: Player)
 		layout = FactoryLayout.copy(FactoryLayout.Default),
 		capacity = 1,
 		inventory = {},
+		boosterInventory = {},
 		visualItems = {},
 		announcedSpawn = false,
 		announcedSale = false,
@@ -627,6 +633,7 @@ function FactoryService.getClientState(player: Player): { [string]: any }
 		Success = true,
 		Layout = layoutForClient(factory.layout),
 		Inventory = copyInventory(factory.inventory),
+		BoosterInventory = copyInventory(factory.boosterInventory),
 		Capacity = factory.capacity,
 		SlotCount = FactoryLayout.SlotCount,
 	}
@@ -654,6 +661,7 @@ function FactoryService.getPersistentState(player: Player): { [string]: any }?
 		Coins = factory.simulation:getSnapshot().Coins,
 		Layout = FactoryLayout.copy(factory.layout),
 		Inventory = copyInventory(factory.inventory),
+		BoosterInventory = copyInventory(factory.boosterInventory),
 		Capacity = factory.capacity,
 		Statistics = (function()
 			local snapshot = factory.simulation:getSnapshot()
@@ -686,6 +694,7 @@ function FactoryService.applyPersistentState(player: Player, data: { [string]: a
 	factory.capacity = data.Capacity
 	factory.layout = FactoryLayout.copy(data.Layout)
 	factory.inventory = copyInventory(data.Inventory)
+	factory.boosterInventory = copyInventory(data.BoosterInventory)
 	factory.simulation:setCoins(data.Coins)
 	refreshMachineVisuals(factory)
 	updateDebugAttributes(player, factory)

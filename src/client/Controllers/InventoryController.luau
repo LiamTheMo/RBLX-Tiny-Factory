@@ -10,6 +10,13 @@ local FactoryLayout = require(Shared:WaitForChild("FactoryLayout"))
 local PlacementRules = require(Shared:WaitForChild("PlacementRules"))
 local EconomyConfig = require(Shared:WaitForChild("EconomyConfig"))
 local EconomyRules = require(Shared:WaitForChild("EconomyRules"))
+local BoosterConfig = require(Shared:WaitForChild("BoosterConfig"))
+
+local MACHINE_SECTIONS = {
+	{ Category = "Producer", Title = "Droppers" },
+	{ Category = "Processor", Title = "Upgraders" },
+	{ Category = "Seller", Title = "Sellers" },
+}
 
 local InventoryController = {}
 local started = false
@@ -112,6 +119,7 @@ function InventoryController.start()
 	local removeMachine = remotes:WaitForChild("RemoveMachine") :: RemoteFunction
 	local moveMachine = remotes:WaitForChild("MoveMachine") :: RemoteFunction
 	local sellMachine = remotes:WaitForChild("SellMachine") :: RemoteFunction
+	local useBooster = remotes:WaitForChild("UseBooster") :: RemoteFunction
 	local presentationEvent = remotes:WaitForChild("PresentationEvent") :: RemoteEvent
 
 	local screenGui = Instance.new("ScreenGui")
@@ -164,10 +172,17 @@ function InventoryController.start()
 	status.Size = UDim2.new(1, -36, 0, 24)
 	status.TextSize = 12
 
+	local machinesTab = makeButton(panel, "MachinesTab", "Machines")
+	machinesTab.Position = UDim2.fromOffset(18, 96)
+	machinesTab.Size = UDim2.fromOffset(116, 32)
+	local boostersTab = makeButton(panel, "BoostersTab", "Boosters")
+	boostersTab.Position = UDim2.fromOffset(142, 96)
+	boostersTab.Size = UDim2.fromOffset(116, 32)
+
 	local list = Instance.new("ScrollingFrame")
 	list.Name = "MachineList"
-	list.Position = UDim2.fromOffset(12, 96)
-	list.Size = UDim2.new(1, -24, 1, -108)
+	list.Position = UDim2.fromOffset(12, 136)
+	list.Size = UDim2.new(1, -24, 1, -148)
 	list.BackgroundTransparency = 1
 	list.BorderSizePixel = 0
 	list.ScrollBarThickness = if UserInputService.TouchEnabled then 3 else 5
@@ -188,6 +203,7 @@ function InventoryController.start()
 
 	local state: any = nil
 	local mode = "Inventory"
+	local activeTab = "Machines"
 	local targetSlot: number? = nil
 
 	local function setStatus(message: string, success: boolean?)
@@ -257,6 +273,15 @@ function InventoryController.start()
 			return leftName < rightName
 		end)
 		return ids, totals, placed, available
+	end
+
+	local function makeSection(titleText: string, order: number)
+		local heading = makeLabel(list, "Section_" .. titleText, titleText)
+		heading.LayoutOrder = order
+		heading.Size = UDim2.new(1, -12, 0, 28)
+		heading.Font = Enum.Font.GothamBold
+		heading.TextColor3 = COLORS.Accent
+		heading.TextSize = 15
 	end
 
 	local render: () -> ()
@@ -338,6 +363,13 @@ function InventoryController.start()
 			return
 		end
 
+		boostersTab.Visible = mode == "Inventory"
+		machinesTab.Visible = mode == "Inventory"
+		machinesTab.BackgroundColor3 = if activeTab == "Machines" then COLORS.Accent else COLORS.Button
+		machinesTab.TextColor3 = if activeTab == "Machines" then COLORS.Panel else COLORS.Text
+		boostersTab.BackgroundColor3 = if activeTab == "Boosters" then COLORS.Accent else COLORS.Button
+		boostersTab.TextColor3 = if activeTab == "Boosters" then COLORS.Panel else COLORS.Text
+
 		local ids, totals, placed, available = getCounts()
 		local ownedCount = 0
 		for _, count in pairs(totals) do
@@ -348,19 +380,23 @@ function InventoryController.start()
 
 		if mode == "Placement" and targetSlot then
 			local placementSlot = targetSlot :: number
-			title.Text = string.format("Place in Area %d", placementSlot)
-			subtitle.Text = "Choose an owned machine. The seller must remain the last machine on the route."
+			local requiredCategory = FactoryLayout.expectedCategoryForSlot(placementSlot)
+			local areaLabel = FactoryLayout.getAreaLabel(placementSlot)
+			title.Text = if requiredCategory == "Seller" then "Select Seller" else string.format("Place in Area %d", placementSlot)
+			subtitle.Text = if requiredCategory == "Seller" then "Choose a seller you own for the end of the conveyor."
+				elseif requiredCategory == "Producer" then "Choose a dropper you own." else "Choose an upgrader you own."
 			local currentId = state.Layout[placementSlot]
 			local currentDefinition = if currentId and currentId ~= "" then MachineDefinitions.get(currentId) else nil
 			local currentName = if currentId and currentId ~= "" then (currentDefinition and currentDefinition.DisplayName or currentId) else "Empty"
 			local currentMachineName = currentDefinition and currentDefinition.DisplayName or currentName
-			setStatus(string.format("Area %d · %s · Capacity %d", placementSlot, currentName, state.Capacity), nil)
+			setStatus(string.format("%s · %s · Capacity %d", areaLabel, currentName, state.Capacity), nil)
 
 			local layout = normalizeLayout()
 			local rowIndex = 0
 			for _, machineId in ipairs(ids) do
 				local count = available[machineId] or 0
-				if count > 0 then
+				local machineDefinition = MachineDefinitions.get(machineId)
+				if count > 0 and machineDefinition and machineDefinition.Category == requiredCategory then
 					rowIndex += 1
 					local candidate, placementError = PlacementRules.createPlacementLayout(layout, machineId, placementSlot, state.Capacity)
 					local canPlace = candidate ~= nil
@@ -385,10 +421,10 @@ function InventoryController.start()
 
 			for sourceSlot = 1, state.SlotCount do
 				local sourceId = layout[sourceSlot]
-				if sourceId and sourceSlot ~= placementSlot then
+				local sourceDefinition = sourceId and MachineDefinitions.get(sourceId)
+				if sourceId and sourceDefinition and sourceDefinition.Category == requiredCategory and sourceSlot ~= placementSlot then
 					local candidate, moveError = PlacementRules.createMoveLayout(layout, sourceSlot, placementSlot, state.Capacity)
 					rowIndex += 1
-					local sourceDefinition = MachineDefinitions.get(sourceId)
 					local sourceName = sourceDefinition and sourceDefinition.DisplayName or sourceId
 					local canMove = candidate ~= nil
 					local detail = if canMove
@@ -424,40 +460,87 @@ function InventoryController.start()
 			end
 		else
 			title.Text = "Inventory"
-			subtitle.Text = "Counts include machines installed in your factory."
-			setStatus(string.format("%d machine%s owned across %d type%s.", ownedCount, if ownedCount == 1 then "" else "s", #ids, if #ids == 1 then "" else "s"), nil)
-			local rowIndex = 0
-			local rollPool = MachineDefinitions.getRollPool()
-			for _, machineId in ipairs(ids) do
-				rowIndex += 1
-				local definition = MachineDefinitions.get(machineId)
-				local count = available[machineId] or 0
-				local actionText: string? = nil
-				local action: (() -> ())? = nil
-				if definition and definition.Rollable and count > 0 then
-					actionText = "Recycle"
-					action = function()
-						local response = invoke(sellMachine, machineId, 1)
-						if response and response.Success then
-							setStatus(string.format("Recycled one %s.", definition.DisplayName), true)
-							refresh()
-						elseif response then
-							setStatus(response.Reason or "Machine could not be recycled.", false)
+			if activeTab == "Boosters" then
+				subtitle.Text = "Collected modifiers stay here until you use them."
+				setStatus("Run over world drops to collect boosters.", nil)
+				local boosterCounts = state.BoosterInventory or {}
+				local rowIndex = 0
+				for _, booster in ipairs(BoosterConfig.Definitions) do
+					local count = boosterCounts[booster.Id] or 0
+					if count > 0 then
+						rowIndex += 1
+						local row = Instance.new("Frame")
+						row.Name = "Booster_" .. booster.Id
+						row.LayoutOrder = rowIndex
+						row.Size = UDim2.new(1, -8, 0, 70)
+						row.BackgroundColor3 = COLORS.Row
+						row.BorderSizePixel = 0
+						row.Parent = list
+						addCorner(row, 10)
+						local nameLabel = makeLabel(row, "BoosterName", booster.DisplayName)
+						nameLabel.Position = UDim2.fromOffset(10, 8)
+						nameLabel.Size = UDim2.new(1, -116, 0, 24)
+						nameLabel.Font = Enum.Font.GothamBold
+						nameLabel.TextColor3 = Color3.fromRGB(booster.Color[1], booster.Color[2], booster.Color[3])
+						local detail = makeLabel(row, "BoosterDetails", string.format("Owned ×%d · %s", count, booster.Effect.Kind))
+						detail.Position = UDim2.fromOffset(10, 36)
+						detail.Size = UDim2.new(1, -116, 0, 20)
+						detail.TextColor3 = COLORS.Muted
+						local button = makeButton(row, "UseButton", "Use")
+						button.AnchorPoint = Vector2.new(1, 0.5)
+						button.Position = UDim2.new(1, -8, 0.5, 0)
+						button.Size = UDim2.fromOffset(94, 34)
+						button.Activated:Connect(function()
+							local response = invoke(useBooster, booster.Id)
+							if response and response.Success then
+								refresh()
+							elseif response then
+								setStatus(response.Reason or "Booster could not be used.", false)
+							end
+						end)
+						visibleRowCount += 1
+					end
+				end
+			else
+				subtitle.Text = "Counts include machines installed in your factory."
+				setStatus(string.format("%d machine%s owned across %d type%s.", ownedCount, if ownedCount == 1 then "" else "s", #ids, if #ids == 1 then "" else "s"), nil)
+				local rowIndex = 0
+				local rollPool = MachineDefinitions.getRollPool()
+				for _, section in ipairs(MACHINE_SECTIONS) do
+					rowIndex += 1
+					makeSection(section.Title, rowIndex)
+					for _, machineId in ipairs(ids) do
+						local definition = MachineDefinitions.get(machineId)
+						if definition and definition.Category == section.Category then
+							rowIndex += 1
+							local count = available[machineId] or 0
+							local actionText: string? = nil
+							local action: (() -> ())? = nil
+							if definition.Rollable and count > 0 then
+								actionText = "Recycle"
+								action = function()
+									local response = invoke(sellMachine, machineId, 1)
+									if response and response.Success then
+										setStatus(string.format("Recycled one %s.", definition.DisplayName), true)
+										refresh()
+									elseif response then
+										setStatus(response.Reason or "Machine could not be recycled.", false)
+									end
+								end
+							end
+							local odds = if definition.Rollable then EconomyRules.getMachineOddsLabel(machineId, rollPool) else nil
+							local detail = string.format("%s %s · Owned %d · Placed %d · Available %d", definition.Rarity, definition.Category, totals[machineId] or 0, placed[machineId] or 0, count)
+							if odds then detail ..= string.format(" · %s", odds) end
+							makeRow(machineId, rowIndex, false, count, placed[machineId] or 0, totals[machineId] or 0, actionText, count > 0, action, detail)
+							visibleRowCount += 1
 						end
 					end
 				end
-				local odds = if definition and definition.Rollable then EconomyRules.getMachineOddsLabel(machineId, rollPool) else nil
-				local detail = string.format("%s %s · Owned %d · Placed %d · Available %d", definition and definition.Rarity or "Unknown", definition and definition.Category or "Machine", totals[machineId] or 0, placed[machineId] or 0, count)
-				if odds then
-					detail ..= string.format(" · %s", odds)
-				end
-				makeRow(machineId, rowIndex, false, count, placed[machineId] or 0, totals[machineId] or 0, actionText, count > 0, action, detail)
-				visibleRowCount += 1
 			end
 		end
 
 		if visibleRowCount == 0 then
-			local empty = makeLabel(list, "EmptyInventory", if mode == "Placement" then "No owned machines can be placed here yet." else "No machines owned yet. Use Roll to get your first machine.")
+			local empty = makeLabel(list, "EmptyInventory", if mode == "Placement" then "No owned machines of this type available yet." elseif activeTab == "Boosters" then "No boosters collected yet." else "No machines owned yet. Use Roll to get your first machine.")
 			empty.Size = UDim2.new(1, -12, 0, 48)
 			empty.TextColor3 = COLORS.Muted
 			empty.TextSize = 12
@@ -471,6 +554,7 @@ function InventoryController.start()
 			return
 		end
 		mode = nextMode
+		activeTab = "Machines"
 		targetSlot = if nextMode == "Placement" then slotIndex else nil
 		panel.Visible = true
 		refresh()
@@ -485,6 +569,14 @@ function InventoryController.start()
 		else
 			openPanel("Inventory", nil)
 		end
+	end)
+	machinesTab.Activated:Connect(function()
+		activeTab = "Machines"
+		render()
+	end)
+	boostersTab.Activated:Connect(function()
+		activeTab = "Boosters"
+		render()
 	end)
 	closeButton.Activated:Connect(function()
 		closePanel()
@@ -504,8 +596,8 @@ function InventoryController.start()
 		subtitle.Size = UDim2.new(1, -36, 0, 22)
 		status.Position = UDim2.fromOffset(18, 66)
 		status.Size = UDim2.new(1, -36, 0, 24)
-		list.Position = UDim2.fromOffset(12, 96)
-		list.Size = UDim2.new(1, -24, 1, -108)
+		list.Position = UDim2.fromOffset(12, 136)
+		list.Size = UDim2.new(1, -24, 1, -148)
 	end
 	if camera then
 		layout(camera.ViewportSize)

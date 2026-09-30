@@ -263,11 +263,14 @@ function EffectsController.start()
 		showToast("A booster appeared nearby", getBoosterColor(payload.BoosterId))
 	end)
 	EffectsController.register("LootClaimed", function(payload)
-		local boosterColor = getBoosterColor(payload.BoosterId)
-		if payload.BoosterId == "Luck" then
-			showToast(string.format("Luck x%.1f · %ds", payload.Multiplier or 2, payload.DurationSeconds or 0), boosterColor)
-		else
-			showToast(string.format("Found +%d Coins!", payload.Coins or 0), boosterColor)
+		showToast(string.format("Picked up %s · see Boosters", payload.DisplayName or "booster"), getBoosterColor(payload.BoosterId))
+	end)
+	EffectsController.register("BoosterUsed", function(payload)
+		local color = getBoosterColor(payload.BoosterId)
+		if payload.Multiplier then
+			showToast(string.format("Luck x%.1f · %ds", payload.Multiplier, payload.DurationSeconds or 0), color)
+		elseif payload.Coins then
+			showToast(string.format("+%d Coins!", payload.Coins), color)
 		end
 	end)
 

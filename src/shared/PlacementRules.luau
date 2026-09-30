@@ -35,11 +35,11 @@ function PlacementRules.validateMachineForSlot(machineId: any, slotIndex: any): 
 	if not definition then
 		return false, "Unknown machine"
 	end
-	if slotIndex == 1 and definition.Category ~= "Producer" then
-		return false, "The first factory area must contain a dropper"
-	end
-	if slotIndex > 1 and definition.Category == "Producer" then
-		return false, "Droppers must start the production route"
+	local requiredCategory = FactoryLayout.expectedCategoryForSlot(slotIndex)
+	if definition.Category ~= requiredCategory then
+		if requiredCategory == "Producer" then return false, "The first factory area must contain a dropper" end
+		if requiredCategory == "Seller" then return false, "Only sellers can go in the seller bay" end
+		return false, "Only upgraders can go in this factory area"
 	end
 	return true
 end
@@ -101,8 +101,8 @@ function PlacementRules.validateLayout(layout: FactoryLayout.Layout, capacity: n
 	if producerCount ~= 1 or not layout[1] then
 		return false, "A single dropper is required at the start of the route"
 	end
-	if sellerCount ~= 1 or sellerSlot ~= lastOccupiedSlot then
-		return false, "Place one seller at the end of the production route"
+	if sellerCount ~= 1 or sellerSlot ~= FactoryLayout.SellerSlotIndex or sellerSlot ~= lastOccupiedSlot then
+		return false, "Place one seller in the seller bay"
 	end
 	return true
 end
@@ -130,18 +130,6 @@ function PlacementRules.createPlacementLayout(
 	end
 
 	local candidate = FactoryLayout.copy(layout)
-	local definition = MachineDefinitions.get(machineId)
-	if definition and definition.Category == "Seller" then
-		for otherSlot = 1, FactoryLayout.SlotCount do
-			if otherSlot ~= slotIndex then
-				local current = candidate[otherSlot]
-				local currentDefinition = current and MachineDefinitions.get(current)
-				if currentDefinition and currentDefinition.Category == "Seller" then
-					candidate[otherSlot] = nil
-				end
-			end
-		end
-	end
 	candidate[slotIndex] = machineId
 	local valid, errorMessage = PlacementRules.validateLayout(candidate, capacity)
 	if not valid then

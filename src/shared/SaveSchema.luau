@@ -11,15 +11,17 @@ local FactoryConfig = requireSibling("FactoryConfig")
 local FactoryLayout = requireSibling("FactoryLayout")
 local MachineDefinitions = requireSibling("MachineDefinitions")
 local PlacementRules = requireSibling("PlacementRules")
+local BoosterRules = requireSibling("BoosterRules")
 
 local SaveSchema = {}
-SaveSchema.CurrentVersion = 2
+SaveSchema.CurrentVersion = 3
 
 local function defaultData(): { [string]: any }
 	return {
 		SchemaVersion = SaveSchema.CurrentVersion,
 		Coins = 0,
 		Inventory = {},
+		BoosterInventory = {},
 		Layout = FactoryLayout.copy(FactoryLayout.Default),
 		Capacity = 1,
 		RollCount = 0,
@@ -70,6 +72,36 @@ function SaveSchema.migrate(raw: any): { [string]: any }
 			migrated.Capacity = math.min(migrated.Capacity, FactoryConfig.MaxFactoryCapacity)
 		end
 		migrated.SchemaVersion = 2
+		version = 2
+	end
+	if version == 2 then
+		local legacyLayout = migrated.Layout
+		if type(legacyLayout) == "table" then
+			local sellerSlot: number? = nil
+			for slotIndex = 1, FactoryLayout.SlotCount do
+				local definition = MachineDefinitions.get(legacyLayout[slotIndex])
+				if definition and definition.Category == "Seller" then
+					sellerSlot = slotIndex
+					break
+				end
+			end
+			if sellerSlot and sellerSlot ~= FactoryLayout.SellerSlotIndex then
+				local updatedLayout = table.clone(legacyLayout)
+				local displaced = updatedLayout[FactoryLayout.SellerSlotIndex]
+				local displacedDefinition = MachineDefinitions.get(displaced)
+				if displacedDefinition and displacedDefinition.Rollable then
+					local inventory = if type(migrated.Inventory) == "table" then table.clone(migrated.Inventory) else {}
+					local existing = inventory[displaced]
+					inventory[displaced] = (if type(existing) == "number" and existing % 1 == 0 and existing > 0 then existing else 0) + 1
+					migrated.Inventory = inventory
+				end
+				updatedLayout[sellerSlot] = nil
+				updatedLayout[FactoryLayout.SellerSlotIndex] = legacyLayout[sellerSlot]
+				migrated.Layout = updatedLayout
+			end
+		end
+		migrated.BoosterInventory = migrated.BoosterInventory or {}
+		migrated.SchemaVersion = 3
 	end
 	return migrated
 end
@@ -96,6 +128,8 @@ function SaveSchema.sanitize(raw: any): { [string]: any }
 			end
 		end
 	end
+
+	safe.BoosterInventory = BoosterRules.sanitizeInventory(source.BoosterInventory)
 
 	if type(source.Layout) == "table" then
 		local candidate = {}
