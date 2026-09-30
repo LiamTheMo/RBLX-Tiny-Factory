@@ -111,7 +111,7 @@ function SaveSchema.sanitize(raw: any): { [string]: any }
 	local safe = defaultData()
 
 	if type(source.Coins) == "number" and source.Coins == source.Coins and source.Coins >= 0 then
-		safe.Coins = math.min(math.floor(source.Coins), FactoryConfig.MaxItemValue)
+		safe.Coins = math.min(math.floor(source.Coins), FactoryConfig.MaxCoins)
 	end
 	if type(source.Capacity) == "number" and source.Capacity % 1 == 0 then
 		safe.Capacity = math.clamp(source.Capacity, 1, FactoryConfig.MaxFactoryCapacity)
@@ -149,7 +149,7 @@ function SaveSchema.sanitize(raw: any): { [string]: any }
 		end
 		for statistic, value in pairs(sourceCounters) do
 			if type(statistic) == "string" and statistic:match("^[%a_][%w_]*$") and #statistic <= 48 and type(value) == "number" and value >= 0 and value % 1 == 0 then
-				destination[statistic] = math.min(value, 1_000_000)
+				destination[statistic] = math.min(value, if statistic == "TotalValueSold" then FactoryConfig.MaxCoins else 1_000_000)
 			end
 		end
 	end

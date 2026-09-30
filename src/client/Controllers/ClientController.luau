@@ -6,6 +6,7 @@ local started = false
 local BuildController = require(script.Parent.BuildController)
 local EconomyController = require(script.Parent.EconomyController)
 local EffectsController = require(script.Parent.EffectsController)
+local CubeHoverController = require(script.Parent.CubeHoverController)
 local InventoryController = require(script.Parent.InventoryController)
 
 function ClientController.start()
@@ -17,6 +18,7 @@ function ClientController.start()
 	InventoryController.start()
 	BuildController.start()
 	EconomyController.start()
+	CubeHoverController.start()
 end
 
 return ClientController

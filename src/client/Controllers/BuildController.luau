@@ -14,7 +14,7 @@ function BuildController.start()
 
 	local player = Players.LocalPlayer
 	local plotsFolder = workspace:WaitForChild("TinyFactoryPlots")
-	local connectedDetectors: { [ClickDetector]: boolean } = {}
+	local connectedDetectors: { [ClickDetector]: boolean } = setmetatable({}, { __mode = "k" })
 
 	local function connectPhysicalSlot(instance: Instance)
 		if not instance:IsA("ClickDetector") or instance.Name ~= "FactorySlotClick" or connectedDetectors[instance] then
