@@ -15,6 +15,12 @@ return {
 		BaseColor = { 154, 119, 81 },
 	},
 	Conveyor = {
+		Elevation = 1.5,
+		SellerBay = {
+			DeckColor = { 54, 47, 43 },
+			AccentColor = { 240, 168, 143 },
+			LabelColor = { 255, 218, 196 },
+		},
 		SegmentOverlap = 0.16,
 		BeltWidth = 4.8,
 		DeckThickness = 0.38,

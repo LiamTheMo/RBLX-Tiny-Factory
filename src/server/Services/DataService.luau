@@ -141,6 +141,7 @@ local function savePlayer(player: Player, releaseLock: boolean?)
 		Coins = factoryData.Coins,
 		Layout = factoryData.Layout,
 		Inventory = factoryData.Inventory,
+		BoosterInventory = factoryData.BoosterInventory,
 		Capacity = factoryData.Capacity,
 		RollCount = economyData.RollCount,
 		Statistics = factoryData.Statistics,
