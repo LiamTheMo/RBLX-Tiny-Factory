@@ -4,6 +4,8 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
+local NumberFormatter = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("NumberFormatter"))
+
 local EffectsController = require(script.Parent.EffectsController)
 
 local EconomyController = {}
@@ -68,6 +70,7 @@ function EconomyController.start()
 	title.Parent = panel
 
 	local status = Instance.new("TextLabel")
+	status.Name = "EconomyStatus"
 	status.BackgroundTransparency = 1
 	status.TextColor3 = COLORS.Text
 	status.TextWrapped = true
@@ -112,13 +115,13 @@ function EconomyController.start()
 		local expiresAt = if state then state.LuckExpiresAt or 0 else 0
 		local remaining = math.max(0, expiresAt - workspace:GetServerTimeNow())
 		luckStatus.Visible = multiplier > 1 and remaining > 0
-		luckStatus.Text = if luckStatus.Visible then string.format("Luck x%.1f · %ds", multiplier, math.ceil(remaining)) else ""
+		luckStatus.Text = if luckStatus.Visible then string.format("Luck x%.2f · %ds", multiplier, math.ceil(remaining)) else ""
 	end
 
 	local function updateRollButton()
 		local remaining = math.max(0, cooldownEndAt - os.clock())
 		local ready = state ~= nil and state.DataReady == true
-		roll.Text = if rolling then "ROLLING..." elseif not ready then "FACTORY LOADING" elseif remaining > 0 then string.format("READY IN %.1fs", remaining) else "Roll"
+		roll.Text = if rolling then "ROLLING..." elseif not ready then "FACTORY LOADING" elseif remaining > 0 then string.format("READY IN %.2fs", remaining) else "Roll"
 		roll.TextSize = if rolling then 16 else 20
 		roll.TextWrapped = false
 		roll.Active = ready and not rolling and remaining <= 0
@@ -160,6 +163,8 @@ function EconomyController.start()
 		syncCooldown(response)
 		if response and response.Success then
 			state = response
+			local ready = player:GetAttribute("FactoryDataReady")
+			if type(ready) == "boolean" then state.DataReady = ready end
 			render()
 			updateRollButton()
 		else
@@ -171,9 +176,9 @@ function EconomyController.start()
 		if not state then
 			return
 		end
-		status.Text = if state.DataReady then `Coins {state.Coins}  |  Slots {state.Capacity}/{state.MaxCapacity}  |  Machines {state.InventoryCount or 0}/{state.MaxInventoryMachines or 200}` else (state.DataError or "Factory data is loading")
+		status.Text = if state.DataReady then `Coins {NumberFormatter.format(state.Coins)}  |  Slots {state.Capacity}/{state.MaxCapacity}  |  Machines {state.InventoryCount or 0}/{state.MaxInventoryMachines or 200}` else (state.DataError or "Factory data is loading")
 		updateLuckStatus()
-		capacity.Text = if state.CapacityCost then `Buy capacity · {state.CapacityCost} Coins` else "Capacity MAX"
+		capacity.Text = if state.CapacityCost then `Buy capacity · {NumberFormatter.format(state.CapacityCost)} Coins` else "Capacity MAX"
 	end
 
 	roll.Activated:Connect(function()
@@ -242,12 +247,29 @@ function EconomyController.start()
 		layout(1000, 800)
 	end
 	setStatus("Roll for free; production funds capacity upgrades.", nil)
-	refresh(nil)
-	presentationEvent.OnClientEvent:Connect(function(eventName: string)
-		if eventName == "InventoryChanged" then
+	player:GetAttributeChangedSignal("FactoryCoins"):Connect(function()
+		local balance = player:GetAttribute("FactoryCoins")
+		if state and type(balance) == "number" then state.Coins = balance; render() end
+	end)
+	for _, attribute in ipairs({ "FactoryDataReady", "FactoryDataError" }) do
+		player:GetAttributeChangedSignal(attribute):Connect(function()
+			if state then
+				state.DataReady = player:GetAttribute("FactoryDataReady") == true
+				state.DataError = player:GetAttribute("FactoryDataError")
+				render()
+				updateRollButton()
+			end
+		end)
+	end
+	presentationEvent.OnClientEvent:Connect(function(eventName: string, payload: any)
+		if eventName == "ItemSold" and state and type(payload.Balance) == "number" then
+			state.Coins = payload.Balance
+			render()
+		elseif eventName == "InventoryChanged" then
 			refresh(nil)
 		end
 	end)
+	refresh(nil)
 	task.spawn(function()
 		while screenGui.Parent do
 			updateRollButton()

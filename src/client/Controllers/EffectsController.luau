@@ -8,6 +8,8 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local EconomyConfig = require(Shared:WaitForChild("EconomyConfig"))
 local BoosterConfig = require(Shared:WaitForChild("BoosterConfig"))
 local MachineDefinitions = require(Shared:WaitForChild("MachineDefinitions"))
+local FloatingText = require(script.Parent.FloatingText)
+local NumberFormatter = require(Shared:WaitForChild("NumberFormatter"))
 local EconomyRules = require(Shared:WaitForChild("EconomyRules"))
 
 -- A small event registry keeps presentation separate from gameplay authority.
@@ -259,6 +261,11 @@ function EffectsController.start()
 	EffectsController.register("FirstItemSpawned", function()
 		showToast("Your dropper made its first item!", getRarityColor("Rare"))
 	end)
+	EffectsController.register("ItemSold", function(payload)
+		if type(payload.Coins) == "number" and payload.Coins > 0 and typeof(payload.Position) == "Vector3" then
+			FloatingText.show(payload.Position, "+" .. NumberFormatter.format(payload.Coins) .. " Coins ✦", Color3.fromRGB(255, 221, 125))
+		end
+	end)
 	EffectsController.register("FirstItemSold", function()
 		showToast("First sale! The seller earned Coins.", getRarityColor("Uncommon"))
 	end)
@@ -271,9 +278,9 @@ function EffectsController.start()
 	EffectsController.register("BoosterUsed", function(payload)
 		local color = getBoosterColor(payload.BoosterId)
 		if payload.Multiplier then
-			showToast(string.format("Luck x%.1f · %ds", payload.Multiplier, payload.DurationSeconds or 0), color)
+			showToast(string.format("Luck x%.2f · %ds", payload.Multiplier, payload.DurationSeconds or 0), color)
 		elseif payload.Coins then
-			showToast(string.format("+%d Coins!", payload.Coins), color)
+			showToast("+" .. NumberFormatter.format(payload.Coins) .. " Coins!", color)
 		end
 	end)
 

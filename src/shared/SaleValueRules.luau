@@ -25,13 +25,13 @@ local function readMultiplier(layer: any, maximum: number): number
 	return math.clamp(layer.Multiplier, 0.01, maximum)
 end
 
-function SaleValueRules.calculate(
+function SaleValueRules.getBreakdown(
 	baseValue: any,
 	typeModifiers: ModifierLayer?,
 	buffModifiers: ModifierLayer?,
 	sellerModifiers: ModifierLayer?,
 	maxValue: any
-): number?
+): { Value: number, AdditiveBonus: number, Multiplier: number }?
 	if not isFiniteNumber(baseValue) or baseValue < 0 or not isFiniteNumber(maxValue) or maxValue < 1 then
 		return nil
 	end
@@ -50,10 +50,13 @@ function SaleValueRules.calculate(
 	applyLayer(sellerModifiers)
 
 	local result = additiveValue * totalMultiplier
-	if not isFiniteNumber(result) or result >= maximum then
-		return maximum
-	end
-	return math.max(1, math.floor(result))
+	local value = if not isFiniteNumber(result) or result >= maximum then maximum else math.max(1, math.floor(result))
+	return { Value = value, AdditiveBonus = additiveValue - math.min(baseValue, maximum), Multiplier = totalMultiplier }
+end
+
+function SaleValueRules.calculate(baseValue: any, typeModifiers: ModifierLayer?, buffModifiers: ModifierLayer?, sellerModifiers: ModifierLayer?, maxValue: any): number?
+	local breakdown = SaleValueRules.getBreakdown(baseValue, typeModifiers, buffModifiers, sellerModifiers, maxValue)
+	return if breakdown then breakdown.Value else nil
 end
 
 return SaleValueRules

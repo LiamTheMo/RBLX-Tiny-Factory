@@ -1,6 +1,7 @@
 --!strict
 
 local Players = game:GetService("Players")
+local NumberFormatter = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("NumberFormatter"))
 local UserInputService = game:GetService("UserInputService")
 
 local DebugHudController = {}
@@ -52,10 +53,10 @@ function DebugHudController.start()
 	guide.TextYAlignment = Enum.TextYAlignment.Center
 
 	local function refresh()
-		coins.Text = `Coins: {player:GetAttribute("FactoryCoins") or 0}`
+		coins.Text = `Coins: {NumberFormatter.format(player:GetAttribute("FactoryCoins") or 0)}`
 		activeItems.Text = `Active items: {player:GetAttribute("FactoryActiveItems") or 0}`
-		production.Text = `Produced: {player:GetAttribute("FactoryProducedItems") or 0}`
-		sold.Text = `Sold: {player:GetAttribute("FactorySoldItems") or 0}`
+		production.Text = `Produced: {NumberFormatter.integer(player:GetAttribute("FactoryProducedItems") or 0)}`
+		sold.Text = `Sold: {NumberFormatter.integer(player:GetAttribute("FactorySoldItems") or 0)}`
 		capacity.Text = `Capacity: {player:GetAttribute("FactoryCapacity") or 1}`
 		if player:GetAttribute("FactoryDataLocked") then
 			dataStatus.Text = "Save: another session is active"

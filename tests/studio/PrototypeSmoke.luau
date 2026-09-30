@@ -109,6 +109,7 @@ resultEvent.OnServerEvent:Connect(function(player, success, message)
 	if machineFolder then
 		for _, machineModel in ipairs(machineFolder:GetChildren()) do
 			assert(not machineModel:FindFirstChild("MachineLabel", true), "placed-machine holograms should be hidden")
+			assert(machineModel:GetAttribute("VisualVariant") and machineModel:FindFirstChild("MachineBadge", true), "machine variants and housing symbols must be visible")
 			if machineModel:FindFirstChild("DropperHousing", true) then
 				hasDropper = true
 			end
@@ -162,7 +163,40 @@ local success, message = pcall(function()
 	assert(rollButton, "roll button missing")
 	assert(player.PlayerGui:WaitForChild("FactoryEffects"):FindFirstChild("CutsceneOverlay"), "cutscene overlay missing")
 
+	local formatter = require(ReplicatedStorage.Shared.NumberFormatter)
+	local initialCoins = player:GetAttribute("FactoryCoins") or 0
+	local incomeDeadline = os.clock() + 7
+	repeat task.wait(0.1) until (player:GetAttribute("FactoryCoins") or 0) > initialCoins or os.clock() >= incomeDeadline
+	assert((player:GetAttribute("FactoryCoins") or 0) > initialCoins, "seller must credit Coins without any inventory action")
+	task.wait(0.15)
+	assert(gui.EconomyPanel.EconomyStatus.Text:find("Coins " .. formatter.format(player:GetAttribute("FactoryCoins")), 1, true), "Coins HUD must reflect production income live")
+	local hover = require(player.PlayerScripts.Client.Controllers.CubeHoverController)
+	local plots = workspace.TinyFactoryPlots
+	local ownedPlot = plots:FindFirstChild("Factory_" .. player.UserId)
+	local cube = nil
+	local hoverDeadline = os.clock() + 4
+	repeat
+		for _, child in ipairs(ownedPlot:GetChildren()) do
+			if child:IsA("BasePart") and child:GetAttribute("FactoryItem") then cube = child; break end
+		end
+		if not cube then task.wait(0.1) end
+	until cube or os.clock() >= hoverDeadline
+	assert(cube and hover.focusItem(cube), "a cube must be inspectable")
+	local tooltip = player.PlayerGui.CubeValueHover
+	assert(tooltip.Enabled and tooltip.Adornee == cube and tooltip.Frame.Value.Text:find("Coins", 1, true), "hover value label is missing")
+	assert(tooltip.Frame.Modifiers.Text:find("chain ×", 1, true) and tooltip.Frame.Modifiers.Text:find("sale ×", 1, true), "hover must show upgrade and sale multipliers")
+	local effects = require(player.PlayerScripts.Client.Controllers.EffectsController)
+	effects.play("ItemSold", { Coins = 1234, Position = cube.Position })
+	local popup = nil
+	for _, child in ipairs(workspace:GetChildren()) do
+		local amount = child:FindFirstChild("Amount", true)
+		if child.Name == "SalePopup" and amount and amount.Text:find("+1.23k Coins", 1, true) then popup = child; break end
+	end
+	assert(popup, "confirmed sales must display formatted floating currency")
+	task.wait(0.3)
+	assert(popup.FloatingCoins.StudsOffsetWorldSpace.Y > 0.5, "sale popup must rise")
 	task.wait(1)
+	assert(popup.Parent == nil, "sale popups must clean themselves up")
 	local before = state:InvokeServer()
 	assert(before.Success and before.RollCost == 0, "free roll state missing")
 	assert(rollButton.Text == "Roll", "ready roll button should say Roll")
@@ -198,7 +232,6 @@ local success, message = pcall(function()
 	task.wait(3.1)
 	local second = roll:InvokeServer()
 	assert(second.Success and second.RollCount == first.RollCount + 1, "cooldown did not expire")
-	local effects = require(player.PlayerScripts.Client.Controllers.EffectsController)
 	effects.play("MachineRolled", { MachineId = second.LastRoll, Rarity = second.LastRarity, LuckMultiplier = second.LastRollLuckMultiplier })
 	local overlay = player.PlayerGui.FactoryEffects.CutsceneOverlay
 	assert(overlay.Visible, "roll cutscene did not open")
