@@ -7,7 +7,7 @@ return {
 	SlotPitch = 7.5,
 	MachineProfileBaseDeckTop = 0.22,
 	FactoryPlot = {
-		SpacingX = 48,
+		SpacingX = 70,
 		BaseLengthPadding = 8,
 		BaseWidth = 16,
 		BaseThickness = 0.6,

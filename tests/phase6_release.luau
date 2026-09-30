@@ -9,10 +9,10 @@ local function expect(condition: boolean, message: string)
 	end
 end
 
-expect(FactoryConfig.BuildVersion == "v1.00", "the release build must identify as v1.00")
+expect(FactoryConfig.BuildVersion == "v1.02", "the release build must identify as v1.02")
 local valid, configurationError = FactorySimulation.validateConfiguration()
 expect(valid, configurationError or "release configuration must validate")
 expect(FactoryConfig.MaxActiveItems <= 24, "release active-item cap must remain bounded")
-expect(FactoryConfig.MaxFactoryCapacity == 2, "four conveyor areas allow two processor slots")
+expect(FactoryConfig.MaxFactoryCapacity == 3, "five conveyor areas allow three processor slots")
 
 print("Phase 6 release tests passed")

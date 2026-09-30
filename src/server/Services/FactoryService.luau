@@ -562,7 +562,6 @@ local function createFactory(player: Player)
 	factories[player] = factory
 	refreshMachineVisuals(factory)
 	updateDebugAttributes(player, factory)
-	AnalyticsService.record(player, "FactoryActive")
 end
 
 local function removeFactory(player: Player)
@@ -718,10 +717,12 @@ function FactoryService.start()
 			local after = factory.simulation:getSnapshot()
 			if not factory.announcedSpawn and after.ProducedItems > before.ProducedItems then
 				factory.announcedSpawn = true
+				AnalyticsService.record(player, "FirstItemProduced")
 				EffectService.fire(player, "FirstItemSpawned")
 			end
 			if not factory.announcedSale and after.SoldItems > before.SoldItems then
 				factory.announcedSale = true
+				AnalyticsService.record(player, "FirstItemSold")
 				EffectService.fire(player, "FirstItemSold", { Coins = after.Coins })
 			end
 			if attributeUpdateAccumulator >= 0.25 then

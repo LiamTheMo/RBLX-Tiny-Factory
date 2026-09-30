@@ -41,9 +41,10 @@ local function useBooster(player: Player, boosterId: any): { [string]: any }
 	local effect = definition.Effect
 	local applied = false
 	local payload: { [string]: any } = { BoosterId = boosterId, DisplayName = definition.DisplayName }
-	if effect.Kind == "Coins" then
-		applied = factory.simulation:grantCoins(effect.Amount)
-		payload.Coins = effect.Amount
+	if effect.Kind == "SaleValue" then
+		applied = EconomyService.grantSaleValueBoost(player, effect.AdditiveBonus or 0, effect.Multiplier, effect.DurationSeconds)
+		payload.Multiplier = effect.Multiplier
+		payload.DurationSeconds = effect.DurationSeconds
 	elseif effect.Kind == "Luck" then
 		applied = EconomyService.grantLuckBoost(player, effect.Multiplier, effect.DurationSeconds)
 		payload.Multiplier = effect.Multiplier

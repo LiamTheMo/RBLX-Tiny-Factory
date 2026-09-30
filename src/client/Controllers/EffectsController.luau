@@ -19,8 +19,8 @@ local handlers: { [string]: ({ [string]: any }) -> () } = {}
 local started = false
 local sequence = 0
 local toastSequence = 0
-local rollOverlayColor = Color3.fromRGB(126, 128, 132)
-local rollOverlayTransparency = 0.55
+local rollOverlayColor = Color3.fromRGB(92, 96, 104)
+local rollOverlayTransparency = 0.28
 
 local rarityColors: { [string]: Color3 } = {}
 for _, band in ipairs(EconomyConfig.RarityOddsBands) do
@@ -84,20 +84,24 @@ function EffectsController.start()
 	heading.Name = "Heading"
 	heading.AnchorPoint = Vector2.new(0.5, 1)
 	heading.Position = UDim2.fromScale(0.5, 0.38)
-	heading.Size = UDim2.new(0.8, 0, 0, 40)
+	heading.Size = UDim2.new(0.9, 0, 0, 64)
 	heading.BackgroundTransparency = 1
 	heading.TextColor3 = Color3.new(1, 1, 1)
 	heading.TextStrokeColor3 = Color3.fromRGB(20, 24, 32)
 	heading.TextStrokeTransparency = 0.22
 	heading.Font = Enum.Font.GothamBlack
 	heading.TextScaled = true
+	local headingTextLimit = Instance.new("UITextSizeConstraint")
+	headingTextLimit.MinTextSize = 24
+	headingTextLimit.MaxTextSize = 48
+	headingTextLimit.Parent = heading
 	heading.Parent = overlay
 
 	local card = Instance.new("TextLabel")
 	card.Name = "RevealCard"
 	card.AnchorPoint = Vector2.new(0.5, 0.5)
 	card.Position = UDim2.fromScale(0.5, 0.5)
-	card.Size = UDim2.new(0.9, 0, 0, 96)
+	card.Size = UDim2.new(0.94, 0, 0, 144)
 	card.BackgroundTransparency = 1
 	card.BorderSizePixel = 0
 	card.TextColor3 = Color3.new(1, 1, 1)
@@ -105,14 +109,14 @@ function EffectsController.start()
 	card.TextStrokeTransparency = 0.24
 	card.Font = Enum.Font.GothamBlack
 	card.TextScaled = true
-	card.TextWrapped = false
+	card.TextWrapped = true
 	local cardTextLimit = Instance.new("UITextSizeConstraint")
-	cardTextLimit.MinTextSize = 14
-	cardTextLimit.MaxTextSize = 24
+	cardTextLimit.MinTextSize = 28
+	cardTextLimit.MaxTextSize = 56
 	cardTextLimit.Parent = card
 	card.Parent = overlay
 	local sizeLimit = Instance.new("UISizeConstraint")
-	sizeLimit.MaxSize = Vector2.new(600, 96)
+	sizeLimit.MaxSize = Vector2.new(1000, 144)
 	sizeLimit.Parent = card
 	local scale = Instance.new("UIScale")
 	scale.Parent = card
@@ -263,7 +267,7 @@ function EffectsController.start()
 	end)
 	EffectsController.register("ItemSold", function(payload)
 		if type(payload.Coins) == "number" and payload.Coins > 0 and typeof(payload.Position) == "Vector3" then
-			FloatingText.show(payload.Position, "+" .. NumberFormatter.format(payload.Coins) .. " Coins ✦", Color3.fromRGB(255, 221, 125))
+			FloatingText.show(payload.Position, "+" .. NumberFormatter.format(payload.Coins) .. " Coins", Color3.fromRGB(255, 221, 125))
 		end
 	end)
 	EffectsController.register("FirstItemSold", function()
@@ -277,10 +281,10 @@ function EffectsController.start()
 	end)
 	EffectsController.register("BoosterUsed", function(payload)
 		local color = getBoosterColor(payload.BoosterId)
-		if payload.Multiplier then
+		if payload.BoosterId == "Luck" then
 			showToast(string.format("Luck x%.2f · %ds", payload.Multiplier, payload.DurationSeconds or 0), color)
-		elseif payload.Coins then
-			showToast("+" .. NumberFormatter.format(payload.Coins) .. " Coins!", color)
+		elseif payload.BoosterId == "Coin" and payload.Multiplier then
+			showToast(string.format("Coins x%.2f · %ds", payload.Multiplier, payload.DurationSeconds or 0), color)
 		end
 	end)
 

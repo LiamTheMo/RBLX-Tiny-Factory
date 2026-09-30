@@ -4,7 +4,7 @@ local FactoryLayout = {}
 
 export type Layout = { string? }
 
-FactoryLayout.SlotCount = 4
+FactoryLayout.SlotCount = 5
 FactoryLayout.EditableSlotCount = FactoryLayout.SlotCount
 FactoryLayout.MachineSlotCount = FactoryLayout.SlotCount - 1
 FactoryLayout.SellerSlotIndex = FactoryLayout.SlotCount
@@ -27,7 +27,7 @@ function FactoryLayout.isEditableMachineSlot(slotIndex: any): boolean
 		and slotIndex >= 1
 		and slotIndex <= FactoryLayout.SlotCount
 end
-FactoryLayout.Default = { "BasicDropper", "ValueMultiplier", nil, "Seller" }
+FactoryLayout.Default = { "BasicDropper", "ValueMultiplier", nil, nil, "Seller" }
 
 function FactoryLayout.copy(layout: Layout): Layout
 	local result: Layout = {}

@@ -41,11 +41,17 @@ Purpose:
 - keep inventory usable
 - avoid converting free rolls into unlimited Coins
 
-The conveyor Seller and stored Coin boosters earn Coins. Other stored world boosters grant temporary effects, not new currencies. The Machines tab groups installed and available machines into Droppers, Upgraders, and Sellers; recycling acts only on an available copy. The Boosters tab shows collected item modifiers with an explicit Use action.
+The conveyor Seller earns Coins. The Coin world booster grants a temporary 2× sale-value multiplier; it does not award a fixed Coin amount. Luck boosters affect only machine-roll odds. The Machines tab groups installed and available machines into Droppers, Upgraders, and Sellers; recycling acts only on an available copy. The Boosters tab shows collected item modifiers with an explicit Use action.
 
 ## 5. Factory Expansion
 
 Capacity upgrades are the only Coin purchase in this prototype.
+
+The release has three processor-capacity states: one starting processor slot,
+then two paid expansions to three processor slots. The physical route has a
+dedicated producer area, three processor areas, and a terminal Seller bay.
+Expansion prices are configured as 25 Coins and 100 Coins for the current
+playtest balance.
 
 This creates a useful choice:
 

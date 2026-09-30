@@ -194,6 +194,7 @@ local function rollMachine(player: Player)
 	player:SetAttribute("FactoryLastRarity", rarity)
 	player:SetAttribute("FactoryLastRollLuckMultiplier", luckMultiplier)
 	AnalyticsService.record(player, "MachineRolled")
+	if (AnalyticsService.snapshot(player).MachineRolled or 0) == 1 then AnalyticsService.record(player, "FirstRoll") end
 	EffectService.fire(player, "InventoryChanged")
 	return response(player, true)
 end
