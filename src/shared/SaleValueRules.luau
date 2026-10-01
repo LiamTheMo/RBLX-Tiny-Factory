@@ -50,7 +50,7 @@ function SaleValueRules.getBreakdown(
 	applyLayer(sellerModifiers)
 
 	local result = additiveValue * totalMultiplier
-	local value = if not isFiniteNumber(result) or result >= maximum then maximum else math.max(1, math.floor(result))
+	local value = if not isFiniteNumber(result) or result >= maximum then maximum else math.max(0.01, math.floor(result * 100 + 0.5) / 100)
 	return { Value = value, AdditiveBonus = additiveValue - math.min(baseValue, maximum), Multiplier = totalMultiplier }
 end
 

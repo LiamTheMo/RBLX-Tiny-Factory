@@ -3,7 +3,7 @@
 -- Temporary, data-driven proof-of-concept visuals for the factory route.
 -- Conveyor dimensions and machine styles live here so the world presentation
 -- can grow without changing placement rules or simulation behavior.
-return {
+local Visuals = {
 	SlotPitch = 7.5,
 	MachineProfileBaseDeckTop = 0.22,
 	FactoryPlot = {
@@ -127,3 +127,29 @@ return {
 		},
 	},
 }
+
+local MachineDefinitions
+if script ~= nil then
+	MachineDefinitions = require(script.Parent.MachineDefinitions)
+else
+	MachineDefinitions = require("./MachineDefinitions")
+end
+local ids = {}
+for id in pairs(MachineDefinitions.all()) do
+	if Visuals.Variants[id] == nil then table.insert(ids, id) end
+end
+table.sort(ids)
+for index, id in ipairs(ids) do
+	local hue = (index * 0.61803398875) % 1
+	local red = math.floor(110 + 110 * math.abs(math.sin(hue * math.pi * 2)))
+	local green = math.floor(110 + 110 * math.abs(math.sin((hue + 0.33) * math.pi * 2)))
+	local blue = math.floor(110 + 110 * math.abs(math.sin((hue + 0.66) * math.pi * 2)))
+	Visuals.Variants[id] = {
+		PrimaryColor = { red, green, blue },
+		AccentColor = { math.min(255, red + 35), math.min(255, green + 35), math.min(255, blue + 35) },
+		Symbol = string.sub(id, 1, 1),
+		Parts = { { Name = "ThemedDetail", Size = { 0.35, 0.9, 0.35 }, Offset = { 0, 2.25, 0 } } },
+	}
+end
+
+return Visuals

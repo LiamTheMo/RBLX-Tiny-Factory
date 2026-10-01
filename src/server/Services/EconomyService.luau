@@ -107,7 +107,7 @@ local function isRateLimited(player: Player): boolean
 end
 
 local function getWallet(state: any): number
-	return state.simulation:getSnapshot().Coins
+	return state.simulation:getCoins()
 end
 
 local function inventoryCount(inventory: { [string]: number }): number
@@ -155,11 +155,14 @@ local function getClientState(player: Player): { [string]: any }
 end
 
 local function chooseMachine(luckMultiplier: number): (any?, { any })
-	local baseRollPool = MachineDefinitions.getRollPool()
-	local rollPool = EconomyRules.getLuckAdjustedRollPool(baseRollPool, luckMultiplier)
-	local totalChance = EconomyRules.getRollPoolTotalChance(rollPool)
-	if totalChance <= 0 then return nil, rollPool end
-	local machineId = EconomyRules.pickMachineId(rollPool, random:NextNumber() * totalChance)
+	local rollPool = MachineDefinitions.getRollPool()
+	local rarityWeights = EconomyRules.getLuckAdjustedRarityWeights(EconomyConfig.RarityWeights, luckMultiplier)
+	local rarityTotal = EconomyRules.getTotalWeight(rarityWeights)
+	local rarity = EconomyRules.weightedPick(rarityWeights, random:NextNumber() * rarityTotal)
+	if not rarity then return nil, rollPool end
+	local itemWeight = EconomyRules.getRollPoolTotalChance(rollPool, rarity)
+	if itemWeight <= 0 then return nil, rollPool end
+	local machineId = EconomyRules.pickMachineId(rollPool, random:NextNumber() * itemWeight, rarity)
 	return machineId and MachineDefinitions.get(machineId) or nil, rollPool
 end
 local function response(player: Player, success: boolean, reason: string?): { [string]: any }

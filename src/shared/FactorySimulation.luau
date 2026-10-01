@@ -74,6 +74,7 @@ export type Snapshot = {
 
 local FactorySimulation = {}
 FactorySimulation.__index = FactorySimulation
+local CUBE_RARITY_RANKS = { Common = 1, Uncommon = 2, Rare = 3, Epic = 4, Legendary = 5 }
 
 local function isFinitePositive(value: any): boolean
 	if type(value) ~= "number" then
@@ -191,6 +192,8 @@ function FactorySimulation:_processItemAtSlot(item: Item): boolean
 		local label = definition.DisplayName
 		if behavior == "MultiplyValue" or behavior == "Goldenize" then
 			label ..= " ×" .. NumberFormatter.format(definition.Multiplier or 1)
+		elseif behavior == "TypeMultiplier" then
+			label ..= " ×" .. NumberFormatter.format(definition.Multiplier or 1)
 		elseif behavior == "ScaleVisual" then
 			label ..= " · size ×" .. NumberFormatter.format(definition.SizeScale or 1)
 		elseif behavior == "AdjustThroughput" then
@@ -203,6 +206,10 @@ function FactorySimulation:_processItemAtSlot(item: Item): boolean
 		end
 		if behavior == "MultiplyValue" then
 			item.Value = math.min(item.Value * (definition.Multiplier or 1), self.maxItemValue)
+		elseif behavior == "TypeMultiplier" then
+			if item.TypeId == definition.TypeFilter then
+				item.Value = math.min(item.Value * (definition.Multiplier or 1), self.maxItemValue)
+			end
 		elseif behavior == "ScaleVisual" then
 			item.SizeScale = math.min(item.SizeScale * (definition.SizeScale or 1), 4)
 		elseif behavior == "SetMaterial" then
@@ -232,8 +239,13 @@ function FactorySimulation:_processItemAtSlot(item: Item): boolean
 			item.Value = math.min(item.Value * (definition.Multiplier or 1), self.maxItemValue)
 			item.VisualState = definition.VisualState or "Golden"
 		elseif behavior == "RandomMultiplier" then
-			local multiplier = if item.Id % 2 == 0 then 3 else 0.5
-			item.Value = math.max(1, math.min(math.floor(item.Value * multiplier), self.maxItemValue))
+			local chance = definition.BonusChance
+			local multiplier = if chance == nil
+				then (if item.Id % 2 == 0 then 3 else 0.5)
+				else (if chance > 0 and item.Id % math.max(1, math.floor(1 / chance + 0.5)) == 0 then definition.BonusMultiplier or 2 else 1)
+			if multiplier ~= 1 then
+				item.Value = math.max(1, math.min(math.floor(item.Value * multiplier * 100 + 0.5) / 100, self.maxItemValue))
+			end
 		end
 		self.processedItems += 1
 	elseif definition.Category == "Seller" then
@@ -283,6 +295,40 @@ function FactorySimulation:_advanceItem(item: Item, deltaTime: number): boolean
 	return false
 end
 
+local function sellerModifiersFor(item: Item, seller: any, soldItems: number): ValueModifierLayer
+	local modifiers = table.clone(seller.SaleModifiers or { AdditiveBonus = 0, Multiplier = 1 })
+	local payoutMultiplier = 1
+	local behavior = seller.Behavior or "Payout"
+	if behavior == "ConditionalPayout" and item.Value >= (seller.MinimumValue or math.huge) then
+		payoutMultiplier = seller.PayoutMultiplier or 1
+	elseif behavior == "TypePayout" and item.TypeId == seller.TypeFilter then
+		payoutMultiplier = seller.PayoutMultiplier or 1
+	elseif behavior == "ChancePayout" then
+		local denominator = math.max(1, math.floor(1 / math.max(seller.BonusChance or 0, 0.000001) + 0.5))
+		payoutMultiplier = if item.Id % denominator == 0 then seller.BonusMultiplier or 1 else 1
+	elseif behavior == "StreakPayout" then
+		payoutMultiplier = if (soldItems + 1) % (seller.BonusEvery or math.huge) == 0 then seller.BonusMultiplier or 1 else 1
+	elseif behavior == "RarityPayout" then
+		local cubeType = CubeTypeDefinitions.get(item.TypeId)
+		if cubeType and (CUBE_RARITY_RANKS[cubeType.Rarity] or 0) >= (CUBE_RARITY_RANKS[seller.RequiredCubeRarity or "Epic"] or 4) then
+			payoutMultiplier = seller.PayoutMultiplier or 1
+		end
+	elseif behavior == "Payout" then
+		payoutMultiplier = seller.PayoutMultiplier or 1
+	end
+	modifiers.Multiplier = (modifiers.Multiplier or 1) * payoutMultiplier
+	return modifiers
+end
+
+function FactorySimulation:getSaleModifiers(itemId: number): ValueModifierLayer?
+	local seller = MachineDefinitions.get(self.route[#self.route])
+	if not seller or seller.Category ~= "Seller" then return nil end
+	for _, item in ipairs(self.activeItems) do
+		if item.Id == itemId then return sellerModifiersFor(item, seller, self.soldItems) end
+	end
+	return nil
+end
+
 function FactorySimulation:sellItem(itemId: any, buffModifiers: ValueModifierLayer?): (boolean, number?)
 	if type(itemId) ~= "number" or itemId % 1 ~= 0 or itemId < 1 then
 		return false, nil
@@ -299,11 +345,12 @@ function FactorySimulation:sellItem(itemId: any, buffModifiers: ValueModifierLay
 				return false, nil
 			end
 
+			local saleModifiers = sellerModifiersFor(item, seller, self.soldItems)
 			local saleValue = SaleValueRules.calculate(
 				item.Value,
 				item.TypeModifiers,
 				buffModifiers,
-				seller.SaleModifiers,
+				saleModifiers,
 				self.maxItemValue
 			)
 			if not saleValue then
@@ -322,13 +369,15 @@ function FactorySimulation:sellItem(itemId: any, buffModifiers: ValueModifierLay
 	return false, nil
 end
 
-function FactorySimulation:step(deltaTime: number)
+function FactorySimulation:step(deltaTime: number): (boolean, boolean)
 	assert(type(deltaTime) == "number" and deltaTime == deltaTime, "deltaTime must be a number")
 	assert(deltaTime >= 0 and deltaTime <= 60, "deltaTime must be between 0 and 60 seconds")
 	if deltaTime == 0 then
-		return
+		return false, false
 	end
 
+	local producedBefore = self.producedItems
+	local soldBefore = self.soldItems
 	self.timeSeconds += deltaTime
 	self.pendingItems = {}
 	local spawnCount = 0
@@ -357,6 +406,12 @@ function FactorySimulation:step(deltaTime: number)
 			self.droppedItemsAtCap += 1
 		end
 	end
+	table.clear(self.pendingItems)
+	return self.producedItems > producedBefore, self.soldItems > soldBefore
+end
+
+function FactorySimulation:getCoins(): number
+	return self.coins
 end
 
 function FactorySimulation:getSnapshot(): Snapshot

@@ -37,10 +37,10 @@ local waitingForContact = layeredChain:getActiveItemsForDebug()[1]
 expect(waitingForContact and waitingForContact.ReadyForSale, "item should wait at the Seller for a hitbox contact")
 expect(layeredChain:getSnapshot().Coins == 0 and layeredChain:getSnapshot().SoldItems == 0, "reaching the Seller without hitbox contact must not award Coins")
 local sold, credited = layeredChain:sellItem(waitingForContact.Id, { AdditiveBonus = 3, Multiplier = 2 })
-expect(sold and credited == 37, "type, buff, processor, and Seller modifiers should determine the sale payout")
+expect(sold and credited == 37.5, "type, buff, processor, and Seller modifiers should determine the sale payout")
 expect(not layeredChain:sellItem(waitingForContact.Id, { AdditiveBonus = 3, Multiplier = 2 }), "a cube must not be credited twice")
 local layeredSnapshot = layeredChain:getSnapshot()
-expect(layeredSnapshot.Coins == 37 and layeredSnapshot.TotalValueSold == 37 and layeredSnapshot.SoldItems == 1, "sale stats should match the credited currency")
+expect(layeredSnapshot.Coins == 37.5 and layeredSnapshot.TotalValueSold == 37.5 and layeredSnapshot.SoldItems == 1, "sale stats should match the credited currency")
 basicDropper.TypeModifiers = originalTypeModifiers
 seller.SaleModifiers = originalSellerModifiers
 

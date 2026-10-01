@@ -4,9 +4,10 @@ return {
 	RollCooldownSeconds = 3,
 	MaxInventoryMachines = 200,
 	CapacityCosts = { 25, 100 },
-	MachineRollChanceTotal = 100,
 	MaxLuckMultiplier = 2,
 	MaxSaleValueMultiplier = 10,
+	-- First draw: rarity. Second draw: RollWeight among machines of that rarity.
+	RarityWeights = { Common = 70, Uncommon = 20, Rare = 8, Epic = 1.8, Legendary = 0.2 },
 	UltraRareCutscene = {
 		MinimumOddsDenominator = 10000,
 		DurationSeconds = 2.4,

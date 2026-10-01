@@ -3,6 +3,7 @@
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Visuals = require(Shared.MachineVisualConfig)
 local Geometry = require(Shared.FactoryItemGeometry)
+local CubeTypeDefinitions = require(Shared.CubeTypeDefinitions)
 local Builder = {}
 
 local function rgb(channels: { number }): Color3
@@ -13,7 +14,10 @@ function Builder.build(parent: Instance, origin: Vector3, slot: number, definiti
 	local profileKey = definition.VisualStyle or (if definition.Category == "Producer" then "Dropper" else definition.Category)
 	local profile = Visuals.Profiles[profileKey] or Visuals.Profiles.Processor
 	local variant = Visuals.Variants[definition.Id] or {}
-	local primary = rgb(variant.PrimaryColor or profile.PrimaryColor)
+	local themedType = CubeTypeDefinitions.get(definition.CubeType or definition.TypeFilter or "")
+	local themedColor = themedType and themedType.Color or nil
+	local primaryColor = variant.PrimaryColor or (themedColor or profile.PrimaryColor)
+	local primary = rgb(primaryColor)
 	local accent = rgb(variant.AccentColor or profile.AccentColor)
 	local base = origin + Vector3.new((slot - 1) * Visuals.SlotPitch, Geometry.machineLift(), 0)
 	local model = Instance.new("Model")

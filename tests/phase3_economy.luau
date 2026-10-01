@@ -25,7 +25,7 @@ local layeredSale = SaleValueRules.calculate(
 	{ AdditiveBonus = 4, Multiplier = 1.25 },
 	1000
 )
-expect(layeredSale == 71, "sale value should add all bonuses before multiplying and flooring")
+expect(layeredSale == 71.25, "sale value should add all bonuses before multiplying and cent rounding")
 expect(
 	SaleValueRules.calculate(10, { AdditiveBonus = 1, Multiplier = 1.5 }, nil, { AdditiveBonus = 2, Multiplier = 2 }, 1000) == 39,
 	"seller modifiers should still apply when no buff layer is active"
@@ -78,37 +78,37 @@ expect(finalRarityBand.Name == "Legendary" and finalRarityBand.MaxDenominator ==
 expect(EconomyRules.getRarityFromOdds(1) == rarityBands[1].Name, "1/1 should use the most common configured band")
 expect(EconomyRules.getRarityFromOdds(12) == "Common", "1/12 should be Common in the configured bands")
 expect(not EconomyRules.getRarityFromOdds(0), "zero denominator should not have a rarity")
-expect(EconomyRules.getMachineOddsDenominator("FastDropper", rollPool) == 20, "machine odds denominator should follow its configured weight")
 expect(not EconomyRules.shouldPlayUltraRareCutscene(10000), "the ultra-rare cutscene should not include the exact 1/10,000 boundary")
 expect(EconomyRules.shouldPlayUltraRareCutscene(10000.01), "the ultra-rare cutscene should include odds rarer than 1/10,000")
-expect(EconomyRules.getMachineOddsLabel("Seller", rollPool) == "1/50", "rollable seller odds should follow its configured two-percent chance")
 local sellerDefinition = MachineDefinitions.get("Seller")
 expect(sellerDefinition ~= nil and sellerDefinition.Rollable, "the seller should be part of the roll pool")
-local totalChance = 0
+local rarityTotal = EconomyRules.getTotalWeight(EconomyConfig.RarityWeights)
+expect(rarityTotal > 0, "nested rarity weights must have positive total weight")
 for _, definition in ipairs(rollPool) do
-	totalChance += definition.RollChance
+	expect(definition.RollWeight ~= nil and definition.RollWeight > 0, "every rollable machine needs an inner weight")
+	expect(EconomyRules.getMachineOddsLabel(definition.Id, rollPool) ~= nil, "every machine must have a nested odds label")
+	local innerTotal = EconomyRules.getRollPoolTotalChance(rollPool, definition.Rarity)
+	local expectedOdds = rarityTotal * innerTotal / (EconomyConfig.RarityWeights[definition.Rarity] * definition.RollWeight)
+	expect(math.abs((EconomyRules.getMachineOddsDenominator(definition.Id, rollPool) or 0) - expectedOdds) < 0.000001, "nested odds must multiply rarity and item weights")
 end
-expect(math.abs(totalChance - EconomyConfig.MachineRollChanceTotal) < 0.000001, "machine chances must total the configured percentage")
-for _, definition in ipairs(rollPool) do
-	local chance = definition.RollChance :: number
-	local odds = EconomyRules.getMachineOddsLabel(definition.Id, rollPool)
-	expect(odds ~= nil and string.sub(odds, 1, 2) == "1/", "every rollable machine must have an odds label")
-	expect(definition.Rarity == EconomyRules.getRarityFromOdds(EconomyConfig.MachineRollChanceTotal / chance), "each machine rarity must follow its weighted chance")
-end
-local baseTotalChance = EconomyRules.getRollPoolTotalChance(rollPool)
-expect(math.abs(baseTotalChance - EconomyConfig.MachineRollChanceTotal) < 0.000001, "base chance total should remain configured")
-local luckyPool = EconomyRules.getLuckAdjustedRollPool(rollPool, 2)
-expect(EconomyRules.getRollPoolTotalChance(luckyPool) > baseTotalChance, "Luck should raise higher-rarity weights")
+local baseWeights = EconomyRules.getRollPoolTotalChance(rollPool)
+expect(baseWeights > 0, "inner machine weights should have a positive total")
+local luckyWeights = EconomyRules.getLuckAdjustedRarityWeights(EconomyConfig.RarityWeights, 2)
 local rarestMachineId = nil
-local rarestBaseDenominator = 0
+local rarestRarityWeight = math.huge
 for _, definition in ipairs(rollPool) do
-	local denominator = EconomyRules.getMachineOddsDenominator(definition.Id, rollPool) or 0
-	if denominator > rarestBaseDenominator then rarestMachineId = definition.Id; rarestBaseDenominator = denominator end
+	local adjusted = luckyWeights[definition.Rarity] / EconomyRules.getTotalWeight(luckyWeights)
+	local base = EconomyConfig.RarityWeights[definition.Rarity] / rarityTotal
+	if adjusted > base and EconomyConfig.RarityWeights[definition.Rarity] < rarestRarityWeight then
+		rarestMachineId = definition.Id
+		rarestRarityWeight = EconomyConfig.RarityWeights[definition.Rarity]
+	end
 end
-local luckyDenominator = EconomyRules.getMachineOddsDenominator(rarestMachineId, luckyPool)
-expect(luckyDenominator and luckyDenominator < rarestBaseDenominator, "Luck should improve the rarest configured odds")
-expect(EconomyRules.getMachineOddsDenominator(rarestMachineId, rollPool) == rarestBaseDenominator, "lucky weights must not mutate base definitions")
-expect(EconomyRules.getRollPoolTotalChance(EconomyRules.getLuckAdjustedRollPool(rollPool, 1)) == baseTotalChance, "inactive Luck should preserve base weights")
+local luckyPool = EconomyRules.getLuckAdjustedRollPool(rollPool, 2)
+expect(luckyPool[1].RollChance ~= nil, "luck-adjusted display pool should expose effective item chances")
+local baseOdds = EconomyRules.getMachineOddsDenominator(rarestMachineId, rollPool)
+local luckyOdds = EconomyRules.getMachineOddsDenominator(rarestMachineId, rollPool, luckyWeights)
+expect(baseOdds and luckyOdds and luckyOdds < baseOdds, "Luck should improve higher-rarity odds")
 
 local boostersValid, boostersError = BoosterRules.validate()
 expect(boostersValid, boostersError or "booster config should validate")
@@ -134,20 +134,18 @@ expect(BoosterConfig.Fall.DurationSeconds > 0 and BoosterConfig.Fall.LandedSize 
 expect(BoosterConfig.Fall.LandingHeight >= BoosterConfig.Fall.LandedSize / 2, "booster should settle on top of a surface")
 
 local goldenizer = assert(MachineDefinitions.get("Goldenizer"))
-expect(goldenizer.Rarity == "Uncommon", "a machine at the inclusive 1/500 boundary should be Uncommon")
+expect(goldenizer.Rarity == "Epic", "nested machine rarity must be explicit and independent of flat odds bands")
 local definitionsValid, definitionsError = MachineDefinitions.validate()
 expect(definitionsValid, definitionsError or "per-machine chance definitions should validate")
 local samplePool = {
-	{ Id = "A", Rollable = true, RollChance = 25 },
-	{ Id = "B", Rollable = true, RollChance = 75 },
+	{ Id = "A", Rarity = "Common", Rollable = true, RollWeight = 1 },
+	{ Id = "B", Rarity = "Common", Rollable = true, RollWeight = 3 },
 }
-expect(EconomyRules.getMachineOddsLabel("A", samplePool) == "1/4", "weighted odds label should use the pool total")
-expect(EconomyRules.getMachineOddsLabel("B", samplePool) == "1/1.3", "weighted odds label should describe the individual machine chance")
-expect(EconomyRules.pickMachineId(samplePool, 0) == "A", "weighted selection should choose the first machine")
-expect(EconomyRules.pickMachineId(samplePool, 24.99) == "A", "first machine chance boundary is incorrect")
-expect(EconomyRules.pickMachineId(samplePool, 25) == "B", "second machine chance boundary is incorrect")
-expect(EconomyRules.pickMachineId(samplePool, 99.99) == "B", "second machine chance range is incorrect")
-expect(EconomyRules.pickMachineId(samplePool, 100) == nil, "out-of-range machine roll should fail")
+local sampleRarities = { Common = 1 }
+expect(EconomyRules.getMachineOddsDenominator("A", samplePool, sampleRarities) == 4, "nested odds should account for both weighted draws")
+expect(EconomyRules.pickMachineId(samplePool, 0, "Common") == "A", "weighted selection should choose the first machine")
+expect(EconomyRules.pickMachineId(samplePool, 1, "Common") == "B", "inner item weights should define the second draw")
+expect(EconomyRules.pickMachineId(samplePool, 4, "Common") == nil, "out-of-range item rolls should fail")
 
 local invalidRoll = EconomyRules.getRollCost(-1)
 expect(not invalidRoll, "negative roll counts must be rejected")

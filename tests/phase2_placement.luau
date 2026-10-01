@@ -65,6 +65,11 @@ expect(removedProcessor[2] == nil and removedProcessor[5] == "Seller", "removal 
 local removedSeller = PlacementRules.createRemoveLayout(defaultLayout, 5, 1)
 expect(removedSeller == nil, "the required seller cannot be removed")
 
+local alternateSellerValid, alternateSellerError = PlacementRules.validateMachineForSlot("PremiumAppraiser", 5)
+expect(alternateSellerValid, alternateSellerError or "a rolled seller should be installable in the seller slot")
+local alternateSellerLayoutValid, alternateSellerLayoutError = PlacementRules.validateLayout({ "BasicDropper", nil, nil, nil, "PremiumAppraiser" })
+expect(alternateSellerLayoutValid, alternateSellerLayoutError or "an alternate seller should satisfy the factory route")
+
 local invalidIndex = PlacementRules.validateSlotIndex(6)
 expect(not invalidIndex, "out-of-range slots must be rejected")
 

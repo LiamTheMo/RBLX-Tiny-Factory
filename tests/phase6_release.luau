@@ -9,7 +9,7 @@ local function expect(condition: boolean, message: string)
 	end
 end
 
-expect(FactoryConfig.BuildVersion == "v1.02", "the release build must identify as v1.02")
+expect(FactoryConfig.BuildVersion == "v2.00", "the release build must identify as v2.00")
 local valid, configurationError = FactorySimulation.validateConfiguration()
 expect(valid, configurationError or "release configuration must validate")
 expect(FactoryConfig.MaxActiveItems <= 24, "release active-item cap must remain bounded")

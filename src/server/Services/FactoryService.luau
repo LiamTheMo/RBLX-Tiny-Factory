@@ -6,6 +6,7 @@ local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local FactoryConfig = require(Shared:WaitForChild("FactoryConfig"))
+local CubeTypeDefinitions = require(Shared:WaitForChild("CubeTypeDefinitions"))
 local MachineVisualConfig = require(Shared:WaitForChild("MachineVisualConfig"))
 local FactoryLayout = require(Shared:WaitForChild("FactoryLayout"))
 local FactoryItemGeometry = require(Shared:WaitForChild("FactoryItemGeometry"))
@@ -24,6 +25,9 @@ local lastRequestAt = {}
 local started = false
 local nextPlotIndex = 0
 local attributeUpdateAccumulator = 0
+local visualUpdateAccumulator = 0
+local VISUAL_UPDATE_INTERVAL_SECONDS = 1 / 20
+local cubeTypeColorCache = {}
 
 local function copyInventory(inventory: { [string]: number }): { [string]: number }
 	local result = {}
@@ -299,13 +303,12 @@ local function refreshMachineVisuals(factory: any)
 	end
 end
 
-local function updateVisualItems(player: Player, factory: any)
+local function updateVisualItems(player: Player, factory: any): boolean
 	local activeItems = factory.simulation:getActiveItemsForDebug()
 	local activeById = {}
 	local visualConfig = MachineVisualConfig.ConveyorItem
 	local buffModifiers = getSaleBuffModifiers(player)
 	local seller = MachineDefinitions.get(factory.layout[FactoryLayout.SellerSlotIndex])
-	local sellerModifiers = seller and seller.SaleModifiers or nil
 	local soldAny = false
 	factory.itemPresentationState = factory.itemPresentationState or {}
 	local function setAttribute(part: BasePart, name: string, value: any)
@@ -321,18 +324,29 @@ local function updateVisualItems(player: Player, factory: any)
 			visual:SetAttribute("ItemId", item.Id)
 			factory.visualItems[item.Id] = visual
 		end
+		local cubeColor = cubeTypeColorCache[item.TypeId]
+		if not cubeColor then
+			local cubeType = CubeTypeDefinitions.get(item.TypeId)
+			local color = cubeType and cubeType.Color
+			cubeColor = if color then Color3.fromRGB(color[1], color[2], color[3]) else Color3.fromRGB(235, 235, 235)
+			cubeTypeColorCache[item.TypeId] = cubeColor
+		end
 		local stateColors = {
-			Base = Color3.fromRGB(235, 235, 235),
+			Base = cubeColor,
 			Painted = Color3.fromRGB(255, 105, 160),
 			Golden = Color3.fromRGB(255, 211, 66),
 		}
 		local size = visualConfig.Size * math.clamp(item.SizeScale or 1, 0.5, 4)
-		visual.Size = Vector3.new(size, size, size)
-		visual.Color = stateColors[item.VisualState] or stateColors.Base
+		local nextSize = Vector3.new(size, size, size)
+		if visual.Size ~= nextSize then visual.Size = nextSize end
+		local nextColor = stateColors[item.VisualState] or stateColors.Base
+		if visual.Color ~= nextColor then visual.Color = nextColor end
 
 		local x, y = FactoryItemGeometry.itemPosition(factory.layout, item)
-		visual.Position = factory.origin + Vector3.new(x, y, 0)
+		local nextPosition = factory.origin + Vector3.new(x, y, 0)
+		if visual.Position ~= nextPosition then visual.Position = nextPosition end
 		local cache = factory.itemPresentationState[item.Id]
+		local sellerModifiers = factory.simulation:getSaleModifiers(item.Id) or (seller and seller.SaleModifiers)
 		local typeAdd, typeMult = item.TypeModifiers.AdditiveBonus or 0, item.TypeModifiers.Multiplier or 1
 		local buffAdd, buffMult = buffModifiers.AdditiveBonus or 0, buffModifiers.Multiplier or 1
 		local sellerAdd, sellerMult = if sellerModifiers then sellerModifiers.AdditiveBonus or 0 else 0, if sellerModifiers then sellerModifiers.Multiplier or 1 else 1
@@ -370,7 +384,7 @@ local function updateVisualItems(player: Player, factory: any)
 			local sold, credited = factory.simulation:sellItem(item.Id, buffModifiers)
 			if sold then
 				soldAny = true
-				EffectService.fire(player, "ItemSold", { Coins = credited, Balance = factory.simulation:getSnapshot().Coins, Position = visual.Position, ItemId = item.Id })
+				EffectService.fire(player, "ItemSold", { Coins = credited, Balance = factory.simulation:getCoins(), Position = visual.Position, ItemId = item.Id })
 				activeById[item.Id] = nil
 			end
 		end
@@ -385,6 +399,7 @@ local function updateVisualItems(player: Player, factory: any)
 			factory.itemPresentationState[itemId] = nil
 		end
 	end
+	return soldAny
 end
 
 local function buildResponse(factory: any, success: boolean, reason: string?): { [string]: any }
@@ -646,7 +661,7 @@ function FactoryService.getPersistentState(player: Player): { [string]: any }?
 		return nil
 	end
 	return {
-		Coins = factory.simulation:getSnapshot().Coins,
+		Coins = factory.simulation:getCoins(),
 		Layout = FactoryLayout.copy(factory.layout),
 		Inventory = copyInventory(factory.inventory),
 		BoosterInventory = copyInventory(factory.boosterInventory),
@@ -707,31 +722,26 @@ function FactoryService.start()
 
 	RunService.Heartbeat:Connect(function(deltaTime)
 		attributeUpdateAccumulator += deltaTime
+		visualUpdateAccumulator += deltaTime
+		local shouldUpdateVisuals = visualUpdateAccumulator >= VISUAL_UPDATE_INTERVAL_SECONDS
+		if shouldUpdateVisuals then visualUpdateAccumulator %= VISUAL_UPDATE_INTERVAL_SECONDS end
 		for player, factory in pairs(factories) do
-			if not dataIsReady(player) then
-				continue
-			end
-			local before = factory.simulation:getSnapshot()
-			factory.simulation:step(deltaTime)
-			updateVisualItems(player, factory)
-			local after = factory.simulation:getSnapshot()
-			if not factory.announcedSpawn and after.ProducedItems > before.ProducedItems then
+			if not dataIsReady(player) then continue end
+			local produced = factory.simulation:step(deltaTime)
+			local sold = if shouldUpdateVisuals then updateVisualItems(player, factory) else false
+			if not factory.announcedSpawn and produced then
 				factory.announcedSpawn = true
 				AnalyticsService.record(player, "FirstItemProduced")
 				EffectService.fire(player, "FirstItemSpawned")
 			end
-			if not factory.announcedSale and after.SoldItems > before.SoldItems then
+			if not factory.announcedSale and sold then
 				factory.announcedSale = true
 				AnalyticsService.record(player, "FirstItemSold")
-				EffectService.fire(player, "FirstItemSold", { Coins = after.Coins })
+				EffectService.fire(player, "FirstItemSold", { Coins = factory.simulation:getCoins() })
 			end
-			if attributeUpdateAccumulator >= 0.25 then
-				updateDebugAttributes(player, factory)
-			end
+			if attributeUpdateAccumulator >= 0.25 then updateDebugAttributes(player, factory) end
 		end
-		if attributeUpdateAccumulator >= 0.25 then
-			attributeUpdateAccumulator = 0
-		end
+		if attributeUpdateAccumulator >= 0.25 then attributeUpdateAccumulator = 0 end
 	end)
 end
 
