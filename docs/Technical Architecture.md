@@ -257,6 +257,8 @@ Recommended safeguards:
 - session lock or conflict protection
 - bounded save size
 - mutation through service APIs rather than arbitrary table edits
+- periodic autosaves that persist the current player state while renewing its
+  session lease, plus saves on leave and server shutdown
 
 ## 13. Data Migration
 

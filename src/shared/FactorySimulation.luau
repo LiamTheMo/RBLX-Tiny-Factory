@@ -53,8 +53,19 @@ export type Snapshot = {
 	Route: { string },
 }
 
+export type VisualItem = {
+	Id: number,
+	Value: number,
+	SlotIndex: number,
+	TimeRemaining: number,
+	CubeType: string,
+	VisualState: string,
+	SizeScale: number,
+}
+
 local FactorySimulation = {}
 FactorySimulation.__index = FactorySimulation
+local CUBE_RARITY_RANKS = { Common = 1, Uncommon = 2, Rare = 3, Epic = 4, Legendary = 5 }
 
 local function isFinitePositive(value: any): boolean
 	if type(value) ~= "number" then
@@ -240,8 +251,7 @@ function FactorySimulation:_processItemAtSlot(item: Item): boolean?
 			payoutMultiplier = if saleNumber % (definition.BonusEvery or math.huge) == 0 then (definition.BonusMultiplier or 1) else 1
 		elseif behavior == "RarityPayout" then
 			local cubeType = CubeTypeDefinitions.get(item.CubeType)
-			local rarities = { Common = 1, Uncommon = 2, Rare = 3, Epic = 4, Legendary = 5 }
-			if not cubeType or (rarities[cubeType.Rarity] or 0) < (rarities[definition.RequiredCubeRarity or "Epic"] or 4) then
+			if not cubeType or (CUBE_RARITY_RANKS[cubeType.Rarity] or 0) < (CUBE_RARITY_RANKS[definition.RequiredCubeRarity or "Epic"] or 4) then
 				payoutMultiplier = 1
 			end
 		end
@@ -278,15 +288,17 @@ function FactorySimulation:_advanceItem(item: Item, deltaTime: number): boolean
 	return false
 end
 
-function FactorySimulation:step(deltaTime: number)
+function FactorySimulation:step(deltaTime: number): (boolean, boolean)
 	assert(type(deltaTime) == "number" and deltaTime == deltaTime, "deltaTime must be a number")
 	assert(deltaTime >= 0 and deltaTime <= 60, "deltaTime must be between 0 and 60 seconds")
 	if deltaTime == 0 then
-		return
+		return false, false
 	end
 
+	local producedBefore = self.producedItems
+	local soldBefore = self.soldItems
 	self.timeSeconds += deltaTime
-	self.pendingItems = {}
+	table.clear(self.pendingItems)
 	local spawnCount = 0
 	while self.timeSeconds >= self.nextSpawnAt do
 		if spawnCount >= self.maxCatchUpSpawnsPerStep then
@@ -313,6 +325,7 @@ function FactorySimulation:step(deltaTime: number)
 			self.droppedItemsAtCap += 1
 		end
 	end
+	return self.producedItems > producedBefore, self.soldItems > soldBefore
 end
 
 function FactorySimulation:getSnapshot(): Snapshot
@@ -341,6 +354,10 @@ function FactorySimulation:tryDebitCoins(amount: number): boolean
 	return true
 end
 
+function FactorySimulation:getCoins(): number
+	return self.coins
+end
+
 function FactorySimulation:grantCoins(amount: number): boolean
 	if type(amount) ~= "number" or amount ~= amount or amount < 0 or amount == math.huge then
 		return false
@@ -357,21 +374,17 @@ function FactorySimulation:setCoins(amount: any): boolean
 	return true
 end
 
-function FactorySimulation:getActiveItemsForDebug(): { Item }
-	local result = {}
+function FactorySimulation:getActiveItemsForVisuals(): { VisualItem }
+	local result: { VisualItem } = {}
 	for index, item in ipairs(self.activeItems) do
 		result[index] = {
 			Id = item.Id,
 			Value = item.Value,
 			SlotIndex = item.SlotIndex,
 			TimeRemaining = item.TimeRemaining,
-			SourceMachineId = item.SourceMachineId,
 			CubeType = item.CubeType,
 			VisualState = item.VisualState,
 			SizeScale = item.SizeScale,
-			TravelScale = item.TravelScale,
-			SellerProcessingStarted = item.SellerProcessingStarted,
-			SaleDueAt = item.SaleDueAt,
 		}
 	end
 	return result

@@ -4,7 +4,7 @@
 -- are shared by the server and the pure simulation tests; economy tuning should
 -- remain data-driven as later phases add configuration services.
 local FactoryConfig = {
-	BuildVersion = "v1.00",
+	BuildVersion = "v2.00",
 	SchemaVersion = 1,
 	MaxActiveItems = 24,
 	MaxItemValue = 1_000_000,

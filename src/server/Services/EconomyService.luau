@@ -54,7 +54,7 @@ local function isRateLimited(player: Player): boolean
 end
 
 local function getWallet(state: any): number
-	return state.simulation:getSnapshot().Coins
+	return state.simulation:getCoins()
 end
 
 local function inventoryCount(inventory: { [string]: number }): number

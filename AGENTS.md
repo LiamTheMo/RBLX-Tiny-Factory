@@ -2,12 +2,13 @@
 
 ## Project status
 
-Tiny Factory is a Roblox incremental/factory game. `main` contains the
-integrated release, and `v0.01` through `v0.06` are permanent cumulative phase
-checkpoints. The local implementation contains the complete Phase 1–6 v1
-candidate. Automated validation is complete. Roblox Studio manual validation
-and remote GitHub synchronization are release handoff steps when credentials
-and a testable Roblox target are available.
+Tiny Factory is a Roblox incremental/factory game. `main` is the deployed
+integration branch; version branches are permanent checkpoints. The active
+implementation is `v2.00`, with a nested weighted machine roll pool, themed
+cube types, alternate sellers, and per-player DataStore persistence. Each
+player's durable state is autosaved every 60 seconds and saved again on leave
+and server shutdown. Roblox Studio validation on the published place is still
+required for runtime, multiplayer, mobile, and reconnect behavior.
 
 ### Cumulative phase checkpoints
 
@@ -31,10 +32,12 @@ The factory is the product. Do not let generic simulator conventions, extra
 currencies, passive number growth, or social features replace the visible
 produce → transform → sell → roll → rebuild loop.
 
-The current local v1 implementation includes deterministic bounded simulation,
-server-authoritative placement and economy, a twelve-machine launch set,
-responsive build/economy HUDs, schema-versioned persistence with session locks,
-bounded analytics, and a Tiny Factory-only validation/deployment workflow.
+The historical v1 implementation established deterministic bounded simulation,
+server-authoritative placement and economy, responsive build/economy HUDs,
+schema-versioned persistence with session locks, bounded analytics, and the
+Tiny Factory validation/deployment workflow. The current v2 machine catalog is
+larger than the original v1 launch set; use the v2 phase documents for current
+scope.
 
 ## Required Git workflow
 
@@ -42,8 +45,8 @@ The major branches are permanent checkpoints. Only `main` and branches named
 `vX.XX` are major branches.
 
 1. Audit the repository, branch, requirements, and existing validation state.
-2. Start from the intended major branch. For current v1 work, use `v1.00`;
-   earlier version branches remain historical checkpoints.
+2. Start from the intended major branch. For current work, use the latest
+   version branch unless the task explicitly targets an earlier checkpoint.
 3. Create a descriptive temporary/minor branch for every change. Never develop
    directly on `main` or a `vX.XX` branch.
 4. Implement one coherent change set on the temporary branch.
@@ -83,8 +86,9 @@ canonical documentation set is:
 - `docs/Scope Classification.md` — Required Now / Valuable Later / Scope Creep.
 - `docs/Future Directions.md` — explicitly conditional post-v4 ideas.
 - `docs/v1.00/` — the complete v1 phase plan and exit criteria.
-- `docs/v2.00/`, `docs/v3.00/`, and `docs/v4.00/` — future constraints that
-  should inform compatibility without pulling future scope into v1.
+- `docs/v2.00/` is the active phase plan. `docs/v3.00/` and `docs/v4.00/`
+  describe future constraints; keep that scope out of the active version unless
+  explicitly requested.
 
 All of the above documentation was read during creation of this file. The
 documentation is intentionally validation-first: a roadmap item is not proof
