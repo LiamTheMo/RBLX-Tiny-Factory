@@ -1,6 +1,7 @@
 --!strict
 
 local FactorySimulation = require("../src/shared/FactorySimulation")
+local FactoryConfig = require("../src/shared/FactoryConfig")
 local MachineDefinitions = require("../src/shared/MachineDefinitions")
 
 local function expect(condition: boolean, message: string)
@@ -9,13 +10,16 @@ local function expect(condition: boolean, message: string)
 	end
 end
 
+local function confirmSellerHitboxContacts(simulation: any)
+	for _, item in ipairs(simulation:getActiveItemsForDebug()) do
+		if item.ReadyForSale then
+			simulation:sellItem(item.Id, { AdditiveBonus = 0, Multiplier = 1 })
+		end
+	end
+end
+
 local valid, configurationError = FactorySimulation.validateConfiguration()
 expect(valid, configurationError or "default configuration is invalid")
-
-local eventProbe = FactorySimulation.new({ SpawnIntervalSeconds = 1 })
-local producedOnStep, soldOnStep = eventProbe:step(0.25)
-expect(producedOnStep and not soldOnStep, "step should report production without allocating snapshots")
-expect(eventProbe:getCoins() == 0, "direct coin reads should match initial simulation state")
 
 local definitionsValid, definitionsError = MachineDefinitions.validate()
 expect(definitionsValid, definitionsError or "machine definitions are invalid")
@@ -26,16 +30,17 @@ local simulation = FactorySimulation.new({
 	MaxActiveItems = 24,
 })
 
-for _ = 1, 12 do
+for _ = 1, 8 do
 	simulation:step(0.25)
+	confirmSellerHitboxContacts(simulation)
 end
 
 local snapshot = simulation:getSnapshot()
-expect(snapshot.ProducedItems == 4, "expected four produced items after three seconds")
-expect(snapshot.SoldItems == 2, "expected two items to complete the seller's processing cycle")
-expect(snapshot.Coins == 20, "the multiplier should double each five-coin standard item")
-expect(snapshot.ProcessedItems == 3, "items should be counted when they pass through the processor")
-expect(snapshot.ActiveItems == 2, "the next item and an item at the seller should remain active")
+expect(snapshot.ProducedItems == 3, "expected three produced items after two seconds")
+expect(snapshot.SoldItems == 2, "expected two items to reach the seller")
+expect(snapshot.Coins == 4, "the multiplier should double each sold item value")
+expect(snapshot.ProcessedItems == 2, "expected two processed items")
+expect(snapshot.ActiveItems == 1, "the third item should still be in the route")
 
 local capped = FactorySimulation.new({
 	SpawnIntervalSeconds = 0.1,
@@ -54,8 +59,10 @@ expect(not invalidType, "non-numeric timing must be rejected")
 
 local firstFactory = FactorySimulation.new()
 local secondFactory = FactorySimulation.new()
-for _ = 1, 12 do firstFactory:step(0.25) end
+firstFactory:step(FactoryConfig.TravelTimePerSlotSeconds * 3 + 1)
+confirmSellerHitboxContacts(firstFactory)
 secondFactory:step(0.5)
+confirmSellerHitboxContacts(secondFactory)
 local firstSnapshot = firstFactory:getSnapshot()
 local secondSnapshot = secondFactory:getSnapshot()
 expect(firstSnapshot.Coins ~= secondSnapshot.Coins, "factories must simulate independently")

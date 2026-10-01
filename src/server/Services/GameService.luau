@@ -6,6 +6,7 @@ local AnalyticsService = require(script.Parent.AnalyticsService)
 local DataService = require(script.Parent.DataService)
 local EffectService = require(script.Parent.EffectService)
 local LootService = require(script.Parent.LootService)
+local BoosterService = require(script.Parent.BoosterService)
 
 local GameService = {}
 local started = false
@@ -20,6 +21,7 @@ function GameService.start()
 	EconomyService.start()
 	DataService.start()
 	AnalyticsService.start()
+	BoosterService.start()
 	LootService.start()
 end
 

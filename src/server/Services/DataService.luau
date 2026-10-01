@@ -12,16 +12,18 @@ local FactoryService = require(script.Parent.FactoryService)
 local EconomyService = require(script.Parent.EconomyService)
 local AnalyticsService = require(script.Parent.AnalyticsService)
 local EffectService = require(script.Parent.EffectService)
+local PersistenceSession = require(script.Parent.PersistenceSession)
 
 local DataService = {}
 local store: any = nil
 local sessionIds: { [Player]: string } = {}
 local loadedPlayers: { [Player]: boolean } = {}
 local started = false
-local lockRefreshAccumulator = 0
+local autosaveAccumulator = 0
+local savingPlayers: { [Player]: boolean } = {}
+local sessionStartedAt: { [Player]: number } = {}
 
 local SESSION_LOCK_SECONDS = 300
-local AUTOSAVE_INTERVAL_SECONDS = 60
 
 local function sessionIdFor(player: Player): string
 	local jobId = game.JobId
@@ -33,16 +35,6 @@ end
 
 local function keyFor(player: Player): string
 	return `Player_{player.UserId}`
-end
-
-local function unpackRecord(value: any): ({ [string]: any }, any, number?)
-	if type(value) ~= "table" then
-		return {}, nil, nil
-	end
-	local data = if type(value.Data) == "table" then value.Data else value
-	local owner = value._SessionId
-	local lastSeen = value._LastSeen
-	return data, owner, if type(lastSeen) == "number" then lastSeen else nil
 end
 
 local function setLoadStatus(player: Player, loaded: boolean, locked: boolean, reason: string?, allowUnsavedPrototype: boolean?)
@@ -81,38 +73,20 @@ local function loadPlayer(player: Player)
 	sessionIds[player] = sessionId
 	setLoadStatus(player, false, false, nil)
 
-	local lockedByAnotherSession = false
 	local now = os.time()
-	local success, storedValue = pcall(function()
-		return store:UpdateAsync(keyFor(player), function(oldValue)
-			local oldData, oldOwner, oldLastSeen = unpackRecord(oldValue)
-			if oldOwner and oldOwner ~= sessionId and oldLastSeen and now - oldLastSeen < SESSION_LOCK_SECONDS then
-				lockedByAnotherSession = true
-				return nil
-			end
-			return {
-				Data = SaveSchema.sanitize(oldData),
-				_SessionId = sessionId,
-				_LastSeen = now,
-			}
-		end)
-	end)
+	local success, loadedData, errorKind = PersistenceSession.acquire(store, keyFor(player), sessionId, now, SESSION_LOCK_SECONDS, SaveSchema.sanitize)
 
 	if not success then
 		sessionIds[player] = nil
-		setLoadStatus(player, false, false, "Data store unavailable")
-		AnalyticsService.record(player, "DataLoadFailure")
-		warn(`Tiny Factory data load failed for {player.UserId}: {storedValue}`)
-		return
-	end
-	if lockedByAnotherSession or storedValue == nil then
-		sessionIds[player] = nil
-		setLoadStatus(player, false, true, "Active session already owns this data")
+		setLoadStatus(player, false, errorKind == "locked", if errorKind == "locked" then "Active session already owns this data" else "Data store unavailable")
+		if errorKind ~= "locked" then
+			AnalyticsService.record(player, "DataLoadFailure")
+			warn(`Tiny Factory data load failed for {player.UserId}`)
+		end
 		return
 	end
 
-	local rawData = unpackRecord(storedValue)
-	local safeData = SaveSchema.sanitize(rawData)
+	local safeData = SaveSchema.sanitize(loadedData)
 	local factoryApplied, factoryError = FactoryService.applyPersistentState(player, safeData)
 	local economyApplied, economyError = EconomyService.applyPersistentState(player, safeData)
 	if not factoryApplied or not economyApplied then
@@ -123,11 +97,17 @@ local function loadPlayer(player: Player)
 		return
 	end
 	AnalyticsService.restore(player, safeData.Analytics)
+	local previousSessions = (AnalyticsService.snapshot(player).SessionStarted or 0)
+	AnalyticsService.record(player, "SessionStarted")
+	if previousSessions > 0 then AnalyticsService.record(player, "ReturnSession") end
+	AnalyticsService.record(player, "FactoryActive")
+	sessionStartedAt[player] = os.time()
 	loadedPlayers[player] = true
 	setLoadStatus(player, true, false, nil)
 end
 
 local function savePlayer(player: Player, releaseLock: boolean?)
+	while savingPlayers[player] do task.wait() end
 	local sessionId = sessionIds[player]
 	if not sessionId or not loadedPlayers[player] then
 		return
@@ -142,42 +122,27 @@ local function savePlayer(player: Player, releaseLock: boolean?)
 		Coins = factoryData.Coins,
 		Layout = factoryData.Layout,
 		Inventory = factoryData.Inventory,
+		BoosterInventory = factoryData.BoosterInventory,
 		Capacity = factoryData.Capacity,
 		RollCount = economyData.RollCount,
 		Statistics = factoryData.Statistics,
 		Analytics = AnalyticsService.snapshot(player),
 	})
-	local conflict = false
-	local now = os.time()
-	local success, result = pcall(function()
-		return store:UpdateAsync(keyFor(player), function(oldValue)
-			local _, owner = unpackRecord(oldValue)
-			if owner and owner ~= sessionId then
-				conflict = true
-				return nil
-			end
-			return {
-				Data = safeData,
-				_SessionId = if releaseLock then nil else sessionId,
-				_LastSeen = now,
-			}
-		end)
-	end)
-	if not success or conflict or result == nil then
-		player:SetAttribute("FactoryDataSaveError", if conflict then "Session ownership changed" else "Data store unavailable")
+	savingPlayers[player] = true
+	local success, errorKind = PersistenceSession.save(store, keyFor(player), sessionId, safeData, releaseLock == true, os.time())
+	savingPlayers[player] = nil
+	if not success then
+		player:SetAttribute("FactoryDataSaveError", if errorKind == "conflict" then "Session ownership changed" else "Data store unavailable")
 		AnalyticsService.record(player, "DataSaveFailure")
-		if conflict then
-			loadedPlayers[player] = nil
-			setLoadStatus(player, false, true, "Session ownership changed")
-		end
-		if not success then
-			warn(`Tiny Factory data save failed for {player.UserId}: {result}`)
-		end
+		warn(`Tiny Factory data save failed for {player.UserId}: {errorKind}`)
 		return
 	end
 	player:SetAttribute("FactoryDataSaved", true)
-	player:SetAttribute("FactoryDataLastSaved", now)
-	player:SetAttribute("FactoryDataSaveError", nil)
+	if releaseLock then
+		loadedPlayers[player] = nil
+		sessionIds[player] = nil
+		sessionStartedAt[player] = nil
+	end
 end
 
 function DataService.start()
@@ -195,6 +160,8 @@ function DataService.start()
 	end
 	Players.PlayerAdded:Connect(loadPlayer)
 	Players.PlayerRemoving:Connect(function(player)
+		local began = sessionStartedAt[player]
+		if began then AnalyticsService.record(player, "SessionSeconds", math.max(0, os.time() - began)) end
 		savePlayer(player, true)
 		loadedPlayers[player] = nil
 		sessionIds[player] = nil
@@ -205,16 +172,13 @@ function DataService.start()
 		end
 	end)
 	RunService.Heartbeat:Connect(function(deltaTime)
-		lockRefreshAccumulator += deltaTime
-		if lockRefreshAccumulator < AUTOSAVE_INTERVAL_SECONDS then
+		autosaveAccumulator += deltaTime
+		if autosaveAccumulator < 60 then
 			return
 		end
-		lockRefreshAccumulator = 0
+		autosaveAccumulator = 0
 		for player in pairs(loadedPlayers) do
-			-- Refresh the session lease and persist the latest factory/economy state
-			-- together. Previously the lease refreshed without saving, leaving
-			-- progress vulnerable to a server crash before PlayerRemoving fired.
-			savePlayer(player, false)
+			task.spawn(savePlayer, player, false)
 		end
 	end)
 	for _, player in Players:GetPlayers() do
