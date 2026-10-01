@@ -12,6 +12,11 @@ end
 local valid, configurationError = FactorySimulation.validateConfiguration()
 expect(valid, configurationError or "default configuration is invalid")
 
+local eventProbe = FactorySimulation.new({ SpawnIntervalSeconds = 1 })
+local producedOnStep, soldOnStep = eventProbe:step(0.25)
+expect(producedOnStep and not soldOnStep, "step should report production without allocating snapshots")
+expect(eventProbe:getCoins() == 0, "direct coin reads should match initial simulation state")
+
 local definitionsValid, definitionsError = MachineDefinitions.validate()
 expect(definitionsValid, definitionsError or "machine definitions are invalid")
 

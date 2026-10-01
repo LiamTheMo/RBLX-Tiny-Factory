@@ -20,6 +20,13 @@ local lastRequestAt = {}
 local started = false
 local nextPlotIndex = 0
 local attributeUpdateAccumulator = 0
+local visualUpdateAccumulator = 0
+local VISUAL_UPDATE_INTERVAL_SECONDS = 1 / 20
+local VISUAL_STATE_COLORS = {
+	Painted = Color3.fromRGB(255, 105, 160),
+	Golden = Color3.fromRGB(255, 211, 66),
+}
+local cubeTypeColorCache = {}
 
 local function copyInventory(inventory: { [string]: number }): { [string]: number }
 	local result = {}
@@ -35,6 +42,16 @@ local function layoutForClient(layout: FactoryLayout.Layout): { string }
 		result[slotIndex] = layout[slotIndex] or ""
 	end
 	return result
+end
+
+local function routeSlotsForLayout(layout: FactoryLayout.Layout): { number }
+	local routeSlots = {}
+	for slotIndex = 1, FactoryLayout.SlotCount do
+		if layout[slotIndex] then
+			table.insert(routeSlots, slotIndex)
+		end
+	end
+	return routeSlots
 end
 
 local function createPart(parent: Instance, name: string, size: Vector3, position: Vector3, color: Color3): Part
@@ -153,8 +170,7 @@ local function refreshMachineVisuals(factory: any)
 end
 
 local function updateVisualItems(factory: any)
-	local activeItems = factory.simulation:getActiveItemsForDebug()
-	local snapshot = factory.simulation:getSnapshot()
+	local activeItems = factory.simulation:getActiveItemsForVisuals()
 	local activeById = {}
 	for _, item in ipairs(activeItems) do
 		activeById[item.Id] = true
@@ -163,30 +179,36 @@ local function updateVisualItems(factory: any)
 			visual = createPart(factory.plot, `Item_{item.Id}`, Vector3.new(0.9, 0.9, 0.9), factory.origin + Vector3.new(0, 1, 0), Color3.fromRGB(235, 235, 235))
 			factory.visualItems[item.Id] = visual
 		end
-		local cubeType = CubeTypeDefinitions.get(item.CubeType)
-		local cubeColor = cubeType and cubeType.Color
-		local stateColors = {
-			Base = if cubeColor then Color3.fromRGB(cubeColor[1], cubeColor[2], cubeColor[3]) else Color3.fromRGB(235, 235, 235),
-			Painted = Color3.fromRGB(255, 105, 160),
-			Golden = Color3.fromRGB(255, 211, 66),
-		}
-		local size = 0.9 * math.clamp(item.SizeScale or 1, 0.5, 4)
-		visual.Size = Vector3.new(size, size, size)
-		visual.Color = stateColors[item.VisualState] or stateColors.Base
-
-		local routeMachineId = snapshot.Route[item.SlotIndex]
-		local visualSlotIndex = 1
-		for slotIndex = 1, FactoryLayout.SlotCount do
-			if factory.layout[slotIndex] == routeMachineId then
-				visualSlotIndex = slotIndex
-				break
-			end
+		local baseColor = cubeTypeColorCache[item.CubeType]
+		if not baseColor then
+			local cubeType = CubeTypeDefinitions.get(item.CubeType)
+			local rgb = cubeType and cubeType.Color
+			baseColor = if rgb then Color3.fromRGB(rgb[1], rgb[2], rgb[3]) else Color3.fromRGB(235, 235, 235)
+			cubeTypeColorCache[item.CubeType] = baseColor
 		end
+		local size = 0.9 * math.clamp(item.SizeScale or 1, 0.5, 4)
+		local nextSize = Vector3.new(size, size, size)
+		if visual.Size ~= nextSize then
+			visual.Size = nextSize
+		end
+		local nextColor = VISUAL_STATE_COLORS[item.VisualState] or baseColor
+		if visual.Color ~= nextColor then
+			visual.Color = nextColor
+		end
+
+		local visualSlotIndex = factory.routeSlots[item.SlotIndex] or 1
 		local progress = 1 - math.clamp(item.TimeRemaining / FactoryConfig.TravelTimePerSlotSeconds, 0, 1)
 		local x = (visualSlotIndex - 1) * 6 + progress * 6
-		visual.Position = factory.origin + Vector3.new(x, 1.05, 0)
-		visual:SetAttribute("ItemValue", item.Value)
-		visual:SetAttribute("CubeType", item.CubeType)
+		local nextPosition = factory.origin + Vector3.new(x, 1.05, 0)
+		if visual.Position ~= nextPosition then
+			visual.Position = nextPosition
+		end
+		if visual:GetAttribute("ItemValue") ~= item.Value then
+			visual:SetAttribute("ItemValue", item.Value)
+		end
+		if visual:GetAttribute("CubeType") ~= item.CubeType then
+			visual:SetAttribute("CubeType", item.CubeType)
+		end
 	end
 
 	for itemId, visual in pairs(factory.visualItems) do
@@ -233,6 +255,7 @@ local function commitLayout(factory: any, layout: FactoryLayout.Layout): (boolea
 		return false, tostring(routeError)
 	end
 	factory.layout = FactoryLayout.copy(layout)
+	factory.routeSlots = routeSlotsForLayout(factory.layout)
 	refreshMachineVisuals(factory)
 	return true
 end
@@ -374,6 +397,7 @@ local function createFactory(player: Player)
 		plot = plot,
 		origin = origin,
 		layout = FactoryLayout.copy(FactoryLayout.Default),
+		routeSlots = routeSlotsForLayout(FactoryLayout.Default),
 		capacity = 1,
 		inventory = {},
 		visualItems = {},
@@ -466,8 +490,9 @@ function FactoryService.getPersistentState(player: Player): { [string]: any }?
 	if not factory then
 		return nil
 	end
+	local snapshot = factory.simulation:getSnapshot()
 	return {
-		Coins = factory.simulation:getSnapshot().Coins,
+		Coins = snapshot.Coins,
 		Layout = FactoryLayout.copy(factory.layout),
 		Inventory = copyInventory(factory.inventory),
 		Capacity = factory.capacity,
@@ -501,6 +526,7 @@ function FactoryService.applyPersistentState(player: Player, data: { [string]: a
 	end
 	factory.capacity = data.Capacity
 	factory.layout = FactoryLayout.copy(data.Layout)
+	factory.routeSlots = routeSlotsForLayout(factory.layout)
 	factory.inventory = copyInventory(data.Inventory)
 	factory.simulation:setCoins(data.Coins)
 	refreshMachineVisuals(factory)
@@ -526,22 +552,27 @@ function FactoryService.start()
 
 	RunService.Heartbeat:Connect(function(deltaTime)
 		attributeUpdateAccumulator += deltaTime
+		visualUpdateAccumulator += deltaTime
+		local shouldUpdateVisuals = visualUpdateAccumulator >= VISUAL_UPDATE_INTERVAL_SECONDS
+		if shouldUpdateVisuals then
+			visualUpdateAccumulator %= VISUAL_UPDATE_INTERVAL_SECONDS
+		end
 		for player, factory in pairs(factories) do
 			if not dataIsReady(player) then
 				continue
 			end
-			local before = factory.simulation:getSnapshot()
-			factory.simulation:step(deltaTime)
-			local after = factory.simulation:getSnapshot()
-			if not factory.announcedSpawn and after.ProducedItems > before.ProducedItems then
+			local produced, sold = factory.simulation:step(deltaTime)
+			if not factory.announcedSpawn and produced then
 				factory.announcedSpawn = true
 				EffectService.fire(player, "FirstItemSpawned")
 			end
-			if not factory.announcedSale and after.SoldItems > before.SoldItems then
+			if not factory.announcedSale and sold then
 				factory.announcedSale = true
-				EffectService.fire(player, "FirstItemSold", { Coins = after.Coins })
+				EffectService.fire(player, "FirstItemSold", { Coins = factory.simulation:getCoins() })
 			end
-			updateVisualItems(factory)
+			if shouldUpdateVisuals then
+				updateVisualItems(factory)
+			end
 			if attributeUpdateAccumulator >= 0.25 then
 				updateDebugAttributes(player, factory)
 			end
