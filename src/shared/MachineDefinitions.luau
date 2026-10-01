@@ -1,11 +1,13 @@
 --!strict
 
 local CubeTypeDefinitions
-if script ~= nil then
-	CubeTypeDefinitions = require(script.Parent.CubeTypeDefinitions)
-else
-	CubeTypeDefinitions = require("./CubeTypeDefinitions")
+local function requireSibling(name: string): any
+	if script ~= nil then return require(script.Parent[name]) end
+	return require("./" .. name)
 end
+CubeTypeDefinitions = requireSibling("CubeTypeDefinitions")
+
+export type ValueModifierLayer = { AdditiveBonus: number?, Multiplier: number? }
 
 export type MachineCategory = "Producer" | "Processor" | "Seller"
 
@@ -17,6 +19,10 @@ export type MachineDefinition = {
 	Rarity: string,
 	Rollable: boolean,
 	RollWeight: number?,
+	OutputType: string?,
+	TypeModifiers: ValueModifierLayer?,
+	SaleModifiers: ValueModifierLayer?,
+	VisualStyle: string?,
 	Behavior: string?,
 	SpawnInterval: number?,
 	OutputValue: number?,
@@ -36,17 +42,24 @@ export type MachineDefinition = {
 }
 
 local function producer(id: string, name: string, rarity: string, weight: number, description: string, interval: number, value: number, cubeType: string): MachineDefinition
-	return { Id = id, DisplayName = name, Category = "Producer", Description = description, Rarity = rarity, Rollable = true, RollWeight = weight, SpawnInterval = interval, OutputValue = value, CubeType = cubeType }
+	local typeDefinition = CubeTypeDefinitions.get(cubeType)
+	return {
+		Id = id, DisplayName = name, Category = "Producer", Description = description,
+		Rarity = rarity, Rollable = true, RollWeight = weight, SpawnInterval = interval,
+		OutputValue = value, CubeType = cubeType, OutputType = cubeType,
+		TypeModifiers = { AdditiveBonus = 0, Multiplier = typeDefinition and typeDefinition.ValueMultiplier or 1 },
+		VisualStyle = "Dropper",
+	}
 end
 
 local function typeUpgrader(id: string, name: string, rarity: string, weight: number, cubeType: string, multiplier: number, description: string): MachineDefinition
-	return { Id = id, DisplayName = name, Category = "Processor", Description = description, Rarity = rarity, Rollable = true, RollWeight = weight, Behavior = "TypeMultiplier", TypeFilter = cubeType, Multiplier = multiplier }
+	return { Id = id, DisplayName = name, Category = "Processor", Description = description, Rarity = rarity, Rollable = true, RollWeight = weight, Behavior = "TypeMultiplier", TypeFilter = cubeType, Multiplier = multiplier, VisualStyle = "Processor" }
 end
 
 local definitions: { [string]: MachineDefinition } = {
 	-- Fixed starter infrastructure. Players can roll alternate droppers and sellers.
-	BasicDropper = { Id = "BasicDropper", DisplayName = "Basic Dropper", Category = "Producer", Description = "Creates standard cubes at a steady rate.", Rarity = "Common", Rollable = false, SpawnInterval = 1, OutputValue = 5, CubeType = "Standard" },
-	Seller = { Id = "Seller", DisplayName = "Pocket Cashier", Category = "Seller", Description = "Pays the cube's full value reliably.", Rarity = "Common", Rollable = true, RollWeight = 2, Behavior = "Payout", PayoutMultiplier = 1, SaleIntervalSeconds = 1 },
+	BasicDropper = { Id = "BasicDropper", DisplayName = "Basic Dropper", Category = "Producer", Description = "Creates standard cubes at a steady rate.", Rarity = "Common", Rollable = false, SpawnInterval = 1, OutputValue = 1, CubeType = "Standard", OutputType = "Standard", TypeModifiers = { AdditiveBonus = 0, Multiplier = 1 }, VisualStyle = "Dropper" },
+	Seller = { Id = "Seller", DisplayName = "Pocket Cashier", Category = "Seller", Description = "Pays the cube's full value reliably.", Rarity = "Common", Rollable = true, RollWeight = 2, Behavior = "Payout", PayoutMultiplier = 1, SaleIntervalSeconds = 1, SaleModifiers = { AdditiveBonus = 0, Multiplier = 1 }, VisualStyle = "Seller" },
 
 	-- Rollable producers. Each cube type has its own base value multiplier.
 	IslandStarter = producer("IslandStarter", "Island Starter", "Common", 8, "A dependable starter line for standard cubes.", 1.5, 5, "Standard"),
@@ -123,6 +136,15 @@ function MachineDefinitions.validate(): (boolean, string?)
 	local sellerCount = 0
 	local rarities = { Common = true, Uncommon = true, Rare = true, Epic = true, Legendary = true }
 	for machineId, definition in pairs(definitions) do
+		definition.VisualStyle = definition.VisualStyle or (if definition.Category == "Producer" then "Dropper" elseif definition.Category == "Seller" then "Seller" else "Processor")
+		if definition.Category == "Producer" then
+			local cubeType = definition.CubeType or "Standard"
+			local typeDefinition = CubeTypeDefinitions.get(cubeType)
+			definition.OutputType = cubeType
+			definition.TypeModifiers = definition.TypeModifiers or { AdditiveBonus = 0, Multiplier = typeDefinition and typeDefinition.ValueMultiplier or 1 }
+		elseif definition.Category == "Seller" then
+			definition.SaleModifiers = definition.SaleModifiers or { AdditiveBonus = 0, Multiplier = 1 }
+		end
 		if definition.Id ~= machineId then
 			return false, `Machine ID mismatch for {machineId}`
 		end
@@ -137,12 +159,12 @@ function MachineDefinitions.validate(): (boolean, string?)
 			if not definition.OutputValue or definition.OutputValue <= 0 or not definition.SpawnInterval or definition.SpawnInterval <= 0 then
 				return false, `Producer {machineId} must have positive value and spawn interval`
 			end
-			if not definition.CubeType or not CubeTypeDefinitions.get(definition.CubeType) then
-				return false, `Producer {machineId} must declare a cube type`
-			end
+				if not definition.CubeType or not CubeTypeDefinitions.get(definition.CubeType) then
+					return false, `Producer {machineId} must declare a cube type`
+				end
 		elseif definition.Category == "Processor" then
 			local behavior = definition.Behavior
-			if behavior == "MultiplyValue" or behavior == "Goldenize" or behavior == "TypeMultiplier" then
+				if behavior == "MultiplyValue" or behavior == "Goldenize" or behavior == "TypeMultiplier" then
 				if not definition.Multiplier or definition.Multiplier <= 0 then
 					return false, `Processor {machineId} must have a positive multiplier`
 				end
