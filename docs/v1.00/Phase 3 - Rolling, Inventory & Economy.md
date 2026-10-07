@@ -11,12 +11,12 @@ Implement the acquisition and economy loop that gives players new factory choice
 - The Inventory button shows all owned machines and separates available copies from installed copies.
 - Clicking a conveyor area opens a contextual machine picker with valid placement, replacement, move, and return actions.
 - Players can recycle an available machine from the full inventory view.
-- Coins earned from production and public pickups buy capacity upgrades.
+- Coins earned from production and sales buy capacity upgrades; pickups grant temporary boosters.
 - A cube earns Coins only when it reaches the Seller hitbox; the server settles its processed value with type, active sale-buff, and Seller modifiers.
 
 ## Systems
 
-- Weighted, server-only machine rolls.
+- Nested weighted, server-only machine rolls: rarity then item.
 - Shared machine definitions and rarity display configuration.
 - One durable inventory model used by both the inventory view and placement picker.
 - Recycling for available machine copies.
@@ -59,7 +59,7 @@ Implement the acquisition and economy loop that gives players new factory choice
 
 Automated validation covers weighted odds, distinct roll weights, rarity mapping, inventory conservation, Seller rollability, capacity limits, and invalid economy requests.
 
-Studio validation checks roll pacing, inventory comprehension, clicked-area placement, Seller movement, recycling, capacity purchase clarity, and mobile usability.
+Studio validation checks roll pacing, inventory comprehension, clicked-area placement, Seller bay replacement, recycling, capacity purchase clarity, and mobile usability.
 
 ## Scope boundary
 

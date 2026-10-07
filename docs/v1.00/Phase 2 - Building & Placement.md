@@ -9,7 +9,7 @@ Let players place and rearrange owned machines on one compact, left-to-right pro
 - The temporary conveyor has five clickable factory areas.
 - Clicking any area opens a contextual view of owned machines that can be placed there, plus valid move and return actions.
 - A persistent Inventory button opens a complete ownership list. Counts include machines that are available and machines already installed.
-- Players can roll a Seller. It can occupy any valid route end instead of being fixed to the fifth area.
+- Players can roll a Seller. It occupies the dedicated fifth-area terminal bay.
 - A temporary dropper assembly visibly releases cubes onto the conveyor.
 - The route still begins with one dropper and ends with one Seller. Empty physical areas are skipped by the simulation.
 
@@ -17,7 +17,7 @@ Let players place and rearrange owned machines on one compact, left-to-right pro
 
 - Area 1 must contain exactly one producer/dropper.
 - Processor machines can be placed only in unlocked areas.
-- Exactly one Seller must be the last occupied area. The Seller is terminal, but its physical area can change.
+- Exactly one seller occupies the fifth-area terminal bay; it does not move into processor areas.
 - A rolled Seller replaces the existing terminal Seller in one validated operation; it cannot create a second Seller.
 - The Seller does not consume a processor capacity slot.
 - Moves and placements are transactional. A failed request leaves both the route and inventory unchanged.
@@ -38,13 +38,13 @@ Machine names, categories, rarity colors, roll weights, and display descriptions
 
 ## Validation
 
-Automated tests cover all five clickable areas, producer and Seller constraints, Seller rollability and movement, processor capacity, invalid route ordering, removal, and invalid indices.
+Automated tests cover all five clickable areas, producer and Seller constraints, Seller rollability and bay replacement, processor capacity, invalid route ordering, removal, and invalid indices.
 
 Studio acceptance checks:
 
 - Click empty and occupied areas, including the current Seller area.
 - Place, replace, move, and return a processor from the contextual inventory.
-- Move a rolled Seller to another route end and confirm the old Seller becomes available inventory.
+- Replace the bay with a rolled seller and confirm the old seller becomes available inventory.
 - Open the Inventory button and compare owned, placed, and available counts.
 - Confirm no unrelated player's plot responds to the click.
 - Verify a cube visibly falls from the placeholder Dropper and travels along the conveyor on desktop and touch devices.

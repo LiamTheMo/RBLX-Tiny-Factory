@@ -14,6 +14,13 @@ else
 	MachineDefinitions = require("./MachineDefinitions")
 end
 
+local CubeTypeDefinitions
+if script ~= nil then
+	CubeTypeDefinitions = require(script.Parent.CubeTypeDefinitions)
+else
+	CubeTypeDefinitions = require("./CubeTypeDefinitions")
+end
+
 local NumberFormatter
 if script ~= nil then
 	NumberFormatter = require(script.Parent.NumberFormatter)
@@ -105,6 +112,7 @@ function FactorySimulation.new(config: SimulationConfig?): any
 		usesConfiguredSpawnInterval = provided.SpawnIntervalSeconds ~= nil,
 		timeSeconds = 0,
 		nextSpawnAt = 0,
+		nextSaleAt = 0,
 		nextItemId = 0,
 		coins = 0,
 		activeItems = {},
@@ -339,6 +347,10 @@ function FactorySimulation:sellItem(itemId: any, buffModifiers: ValueModifierLay
 		return false, nil
 	end
 
+	if self.timeSeconds < self.nextSaleAt then
+		return false, nil
+	end
+
 	for index, item in ipairs(self.activeItems) do
 		if item.Id == itemId then
 			if not item.ReadyForSale then
@@ -361,6 +373,7 @@ function FactorySimulation:sellItem(itemId: any, buffModifiers: ValueModifierLay
 			table.remove(self.activeItems, index)
 			self.coins += credited
 			self.totalValueSold = math.min(self.totalValueSold + credited, self.maxCoins)
+			self.nextSaleAt = self.timeSeconds + (seller.SaleIntervalSeconds or 0)
 			self.soldItems += 1
 			return true, credited
 		end

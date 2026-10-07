@@ -141,7 +141,9 @@ A low-rarity machine can remain useful because of:
 
 ## 10. Initial Machine Set — Current Design
 
-Target **12 machines** for first serious validation, with a ceiling of roughly 15 if the extra machines clearly create new decisions.
+The MVP catalog contains eight rollable droppers and eight rollable sellers per supported rarity (80 combined), plus the existing upgrader set. This supersedes the initial twelve-machine target. Shared behavior and art families keep variants manageable; balance and visual readiness are still acceptance requirements. See `v1.00/Machine-Catalog.md`.
+
+The following list describes the original behavior foundation, not the complete current pool:
 
 Suggested launch set:
 
@@ -166,7 +168,7 @@ Suggested launch set:
 12. Lucky Modifier
 
 ### Seller
-The seller is infrastructure, not necessarily a rolled machine in v1.00.
+Sellers are rolled machines. Exactly one occupies the dedicated terminal bay; replacements conserve ownership. Each seller has a payout rule and a server-enforced sale interval.
 
 This list is a design starting point, not a promise. Remove any machine that does not create a meaningful choice.
 

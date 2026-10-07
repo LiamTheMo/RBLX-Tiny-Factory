@@ -66,7 +66,7 @@ sellReadyItems(duplicateChain)
 local duplicateSnapshot = duplicateChain:getSnapshot()
 expect(duplicateSnapshot.SoldItems == 1, "the original duplicated item should sell")
 expect(duplicateSnapshot.ActiveItems == 1, "the duplicate should remain bounded and active")
-duplicateChain:step(0.2)
+duplicateChain:step(1)
 sellReadyItems(duplicateChain)
 expect(duplicateChain:getSnapshot().SoldItems == 2, "the duplicate should eventually sell")
 

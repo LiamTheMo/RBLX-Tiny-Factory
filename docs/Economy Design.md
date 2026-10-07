@@ -85,27 +85,27 @@ v1.00 only needs enough variety to prove that players notice these differences.
 
 ## 8. Rarity and Economy
 
-Every rollable machine has its own configured roll chance. The server selects from those machine-specific chances, and rarity is derived from the exact reciprocal chance; it is not assigned first and then used to group equal-probability machines.
+Rolls use two server-owned weighted draws: rarity first from `EconomyConfig.RarityWeights`, then a machine from that rarity using `MachineDefinitions.RollWeight`. Rarity is explicitly assigned; reciprocal odds do not reclassify a machine.
 
-| Rarity | Reciprocal denominator |
-| --- | --- |
-| Common | 1 to 100 |
-| Uncommon | greater than 100 to 500 |
-| Rare | greater than 500 to 2,500 |
-| Epic | greater than 2,500 to 10,000 |
-| Legendary | greater than 10,000 |
+| Rarity | Base rarity probability |
+| --- | ---: |
+| Common | 70% |
+| Uncommon | 20% |
+| Rare | 8% |
+| Epic | 1.8% |
+| Legendary | 0.2% |
 
-Each upper denominator limit is inclusive: for example, 1/100 is Common and odds just rarer than 1/100 are Uncommon. Legendary is the final open-ended band; a future tier can be inserted by adding an ordered rarity-band entry before it.
+Whole-roll probability = rarity probability × item weight / total weight of **all** rollable machines in that rarity, including upgraders. Adding entries changes individual odds without changing rarity probabilities. See the generated `v1.00/Machine-Catalog.md`. Luck biases rarity weights using configured `LuckBias`, renormalizes them, and never accepts client-selected results. Base inventory odds exclude Luck; active roll odds reflect the effective pool.
 
-The ordered rarity bands, denominator limits, pastel reveal colors, and luck biases are defined once in shared economy configuration. Rollable machines keep distinct weighted chances alongside their definitions; rarity and displayed 1/x odds are derived from the active weighted pool. Without a booster, the configured base chance total remains 100%. A temporary Luck booster modestly increases weights in higher rarity bands using each band's `LuckBias`; Common stays unchanged, the overall pool is renormalized, and the server caps the multiplier and duration. Inventory odds continue to describe the base chances, while an active roll reveal uses boosted effective odds.
+The legacy denominator bands support cosmetic/config helper behavior and are not the machine classification authority. Preserve pastel rarity colors and the nested draw contract.
 
 Roll animation samples show machine name and reciprocal odds on one readable line. Rarity is shown through the pastel reveal color and final heading (for example, `RARE MACHINE!`) instead of repeating it in that line. A configurable cosmetic cutscene plays when the final effective odds denominator is greater than 10,000; the exact 1/10,000 boundary does not trigger it. Studio tests invoke the shared presentation event to verify the cutscene without relying on a live ultra-rare result.
 
-Random world boosters are defined in `BoosterConfig` and validated by pure `BoosterRules`. The starter set grants Coins or a temporary 2x Luck effect. Drops appear around factory plots, are public to all players, and enter a bounded, persistent booster inventory on Humanoid touch after their landing animation. The server applies their configured rewards only when the player uses them from inventory. A downward raycast selects a collidable land surface while ignoring plots and water; the server validates collection and use. Weights, colors, values, spawn bounds, fall timing, and lifetimes are centralized so new booster types can be added as definitions without duplicating reward logic.
+Random world boosters are defined in `BoosterConfig` and validated by pure `BoosterRules`. The starter set grants a temporary 2x sale-value Coin effect or a temporary 2x Luck effect. Drops appear around factory plots, are public to all players, and enter a bounded, persistent booster inventory on Humanoid touch after their landing animation. The server applies their configured rewards only when the player uses them from inventory. A downward raycast selects a collidable land surface while ignoring plots and water; the server validates collection and use. Weights, colors, values, spawn bounds, fall timing, and lifetimes are centralized so new booster types can be added as definitions without duplicating reward logic.
 
-Seller is a rollable machine definition with a configured 2% base chance. The factory requires exactly one Seller in its dedicated end bay. A newly rolled Seller may replace the old one transactionally; any previously saved movable Seller is migrated into the bay.
+Each rarity contains eight rollable sellers. Their exact chances derive from both weighted draws. The factory requires exactly one seller in its dedicated end bay. A newly rolled Seller may replace the old one transactionally; any previously saved movable Seller is migrated into the bay.
 
-Production cubes wait for contact with the server-owned Seller hitbox before the sale is settled. The server calculates currency from the processed cube value plus additive bonuses from its output type, active sale buffs, and Seller, then applies those layers' multipliers, floors to whole Coins, and caps the payout. The cube is removed and sale statistics are updated in the same transaction as the wallet credit. Luck remains a roll-odds buff and does not change sale value.
+Production cubes wait for contact with the server-owned Seller hitbox before the sale is settled. The server calculates currency from the processed cube value plus additive bonuses from its output type, active sale buffs, and Seller, then applies those layers' multipliers, rounds to two decimal places, and caps the payout. The cube is removed and sale statistics are updated in the same transaction as the wallet credit. A server-owned sale cooldown enforces the installed seller's `SaleIntervalSeconds`; rejected queued sales retain the cube and wallet state. Luck remains a roll-odds buff and does not change sale value.
 
 The configured base machine chances total 100%. Current values are starting balance data for playtests. Rarity may influence average expected power, but should not map directly to a fixed multiplier ladder.
 
