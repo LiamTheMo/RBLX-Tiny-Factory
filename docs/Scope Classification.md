@@ -1,5 +1,9 @@
 # Scope Classification
 
+## Active release status
+
+v1.00 is **Incomplete / Needs Work**. The immediate goal is a good-looking playable MVP: modeled water islands, intentional machine visuals, readable desktop/mobile UI, audio, balanced production and reliable saves. The user-approved catalog is eight droppers and eight sellers per rarity plus existing upgraders. Read `v1.00/MVP-Audit.md` and `v1.00/MVP-Completion-Plan.md`. v2.00 logistics remain planned until deployed MVP acceptance; historical branch names do not establish product completion.
+
 ## v1.00
 
 ### Required Now
@@ -7,7 +11,7 @@
 - one production route
 - deterministic item movement
 - seller
-- roughly 12 distinct launch machines
+- eight droppers and eight sellers per rarity, plus existing upgraders
 - machine placement/move/remove
 - Coins
 - server-authoritative rolling
@@ -16,7 +20,8 @@
 - saving/loading
 - basic analytics
 - mobile building support
-- basic feedback/audio
+- modeled water-island environment and intentional machine silhouettes
+- polished readable feedback/audio
 - active-item cap
 - basic anti-exploit validation
 

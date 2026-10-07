@@ -1,5 +1,9 @@
 # Phase 3 — Machine Framework Expansion
 
+## Implementation gate
+
+Status: **Planned — blocked on v1.00 MVP acceptance**. Complete v1 Phases 7–10, verify deployment and get owner approval of visuals/playability before implementing this phase. Preserve the existing historical v2.00 branch; integrate the accepted v1 baseline without rewriting history. Existing nested RNG, themed cubes, category inventory and alternate sellers are v1 foundations, not evidence that this phase is complete.
+
 ## Objective
 Scale content without scaling code complexity at the same rate.
 
@@ -20,7 +24,7 @@ Scale content without scaling code complexity at the same rate.
 - Add per-machine processing cost metrics.
 
 ## Gameplay Work
-- Expand toward roughly 20–35 total machines only as justified.
+- Build on the accepted MVP catalog; add converters/sorters only when graph interactions justify them.
 - Add converters, sorters, conditional/risk machines selectively.
 - Preserve usefulness of earlier machines.
 

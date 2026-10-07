@@ -1,7 +1,7 @@
 # Phase 4 — Launch Machine Set & Synergies
 
 ## Objective
-Build the smallest machine library that proves ordering, throughput, and combination decisions are fun.
+Build the approved catalog with reusable behaviors and intentional visuals that prove ordering, throughput, and combination decisions are fun.
 
 ## Player-Facing Result
 - Players can create visibly different chains and discover that machine order matters.
@@ -19,10 +19,10 @@ Build the smallest machine library that proves ordering, throughput, and combina
 - Add bounded duplicate/output logic.
 
 ## Gameplay Work
-- Target ~12 launch machines.
+- Use eight droppers and eight sellers per rarity, plus existing upgraders; see `Machine-Catalog.md`.
 - Ensure at least 3 meaningful strategy patterns.
 - Design at least several order-sensitive interactions.
-- Keep seller as fixed infrastructure unless testing strongly favors otherwise.
+- Roll alternate sellers and replace the dedicated terminal bay transactionally; enforce payout conditions and sale intervals.
 
 ## UI/UX Work
 - Clear one-line machine effects
@@ -71,7 +71,7 @@ Phases 1–3.
 
 ## Scope Classification
 ### Required Now
-- small varied library
+- varied catalog built from bounded reusable behaviors
 - readable effects
 - order-sensitive interactions
 - multiple viable strategies
@@ -81,7 +81,7 @@ Phases 1–3.
 - sorters
 - deeper tags
 ### Scope Creep
-- 50+ machines
+- unique expensive subsystems per content variant
 - affixes
 - machine leveling
 - fusion

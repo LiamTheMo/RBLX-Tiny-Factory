@@ -4,7 +4,7 @@
 
 Tiny Factory is a Roblox incremental/factory game. `main` is the deployed
 integration branch; version branches are permanent checkpoints. The active
-implementation is `v2.00`, with a nested weighted machine roll pool, themed
+implementation is the unfinished `v1.00` polished MVP, with a nested weighted machine roll pool, themed
 cube types, alternate sellers, and per-player DataStore persistence. Each
 player's durable state is autosaved every 60 seconds and saved again on leave
 and server shutdown. Roblox Studio validation on the published place is still
@@ -35,9 +35,7 @@ produce → transform → sell → roll → rebuild loop.
 The historical v1 implementation established deterministic bounded simulation,
 server-authoritative placement and economy, responsive build/economy HUDs,
 schema-versioned persistence with session locks, bounded analytics, and the
-Tiny Factory validation/deployment workflow. The current v2 machine catalog is
-larger than the original v1 launch set; use the v2 phase documents for current
-scope.
+Tiny Factory validation/deployment workflow. The MVP catalog has eight droppers and eight sellers in each supported rarity, plus existing upgraders. Read `docs/v1.00/MVP-Audit.md` and `MVP-Completion-Plan.md` for current scope; v2.00 graph expansion is gated on MVP acceptance.
 
 ## Required Git workflow
 
@@ -99,7 +97,7 @@ canonical documentation set is:
 - `docs/Scope Classification.md` — Required Now / Valuable Later / Scope Creep.
 - `docs/Future Directions.md` — explicitly conditional post-v4 ideas.
 - `docs/v1.00/` — the complete v1 phase plan and exit criteria.
-- `docs/v2.00/` is the active phase plan. `docs/v3.00/` and `docs/v4.00/`
+- `docs/v1.00/MVP-Completion-Plan.md` is the active completion plan. `docs/v2.00/` is planned expansion only. `docs/v3.00/` and `docs/v4.00/`
   describe future constraints; keep that scope out of the active version unless
   explicitly requested.
 
@@ -136,7 +134,7 @@ services, tests, or deployment assumptions when implementing Tiny Factory.
 - Coins as the only v1 currency;
 - machine placement, movement, removal, inventory, free rolling, recycling, and a few
   capacity upgrades;
-- approximately twelve machines only if they create distinct decisions;
+- eight rollable droppers and eight sellers per supported rarity, plus existing upgraders;
 - schema-versioned persistence and basic analytics;
 - explicit remote validation and rate limits;
 - readable desktop and mobile building controls;
@@ -300,9 +298,7 @@ branch may publish directly.
 
 ## Definition of done for v1.00
 
-The Phase 1–6 implementation is complete when all phase tests, compilation,
-Rojo build, release checks, and code review pass. A public `v1.00` release still
-requires the following Roblox Studio acceptance checks on the published place:
+Phase 1–6 checks establish the foundation. The modeled/polished MVP also requires Phases 7–10 and owner visual/playability acceptance before v2.00. A public `v1.00` release requires the following Roblox Studio acceptance checks on the published place:
 
 - [ ] New-player no-explanation first-minute test.
 - [ ] Desktop full loop: roll, place, produce, sell, and expand.

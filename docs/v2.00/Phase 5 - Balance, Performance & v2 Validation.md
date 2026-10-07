@@ -1,5 +1,9 @@
 # Phase 5 — Balance, Performance & v2 Validation
 
+## Implementation gate
+
+Status: **Planned — blocked on v1.00 MVP acceptance**. Complete v1 Phases 7–10, verify deployment and get owner approval of visuals/playability before implementing this phase. Preserve the existing historical v2.00 branch; integrate the accepted v1 baseline without rewriting history. Existing nested RNG, themed cubes, category inventory and alternate sellers are v1 foundations, not evidence that this phase is complete.
+
 ## Objective
 Prove that added complexity creates meaningful diversity rather than confusion, dominance, or performance collapse.
 
