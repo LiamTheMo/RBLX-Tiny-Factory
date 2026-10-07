@@ -12,6 +12,9 @@
 - [Future Directions.md](Future%20Directions.md)
 
 ## v1.00
+- [MVP audit](v1.00/MVP-Audit.md)
+- [MVP completion Phases 7–10](v1.00/MVP-Completion-Plan.md)
+- [Generated machine catalog](v1.00/Machine-Catalog.md)
 - [Phase 1 - Factory Simulation Foundation.md](v1.00/Phase%201%20-%20Factory%20Simulation%20Foundation.md)
 - [Phase 2 - Building & Placement.md](v1.00/Phase%202%20-%20Building%20&%20Placement.md)
 - [Phase 3 - Rolling, Inventory & Economy.md](v1.00/Phase%203%20-%20Rolling,%20Inventory%20&%20Economy.md)
@@ -21,6 +24,7 @@
 - [v1.00 Overview.md](v1.00/v1.00%20Overview.md)
 
 ## v2.00
+- [Gated phase implementation sequence](v2.00/Implementation-Sequence.md)
 - [Phase 1 - Logistics Graph Foundation.md](v2.00/Phase%201%20-%20Logistics%20Graph%20Foundation.md)
 - [Phase 2 - Branching, Splitters & Mergers.md](v2.00/Phase%202%20-%20Branching,%20Splitters%20&%20Mergers.md)
 - [Phase 3 - Machine Framework Expansion.md](v2.00/Phase%203%20-%20Machine%20Framework%20Expansion.md)

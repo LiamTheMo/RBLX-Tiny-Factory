@@ -13,6 +13,6 @@ expect(FactoryConfig.BuildVersion == "v1.00", "the release build must identify a
 local valid, configurationError = FactorySimulation.validateConfiguration()
 expect(valid, configurationError or "release configuration must validate")
 expect(FactoryConfig.MaxActiveItems <= 24, "release active-item cap must remain bounded")
-expect(FactoryConfig.MaxFactoryCapacity == 3, "release capacity must remain inside the v1 scope")
+expect(FactoryConfig.MaxFactoryCapacity == 3, "five conveyor areas allow three processor slots")
 
 print("Phase 6 release tests passed")

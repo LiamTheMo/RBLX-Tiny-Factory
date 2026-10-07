@@ -14,20 +14,52 @@ else
 	MachineDefinitions = require("./MachineDefinitions")
 end
 
+local CubeTypeDefinitions
+if script ~= nil then
+	CubeTypeDefinitions = require(script.Parent.CubeTypeDefinitions)
+else
+	CubeTypeDefinitions = require("./CubeTypeDefinitions")
+end
+
+local NumberFormatter
+if script ~= nil then
+	NumberFormatter = require(script.Parent.NumberFormatter)
+else
+	NumberFormatter = require("./NumberFormatter")
+end
+
+local SaleValueRules
+if script ~= nil then
+	SaleValueRules = require(script.Parent.SaleValueRules)
+else
+	SaleValueRules = require("./SaleValueRules")
+end
+
+type ValueModifierLayer = {
+	AdditiveBonus: number?,
+	Multiplier: number?,
+}
+
 type Item = {
 	Id: number,
 	Value: number,
+	BaseValue: number,
+	ModifierLabels: { string },
 	SlotIndex: number,
 	TimeRemaining: number,
 	SourceMachineId: string,
+	TypeId: string,
+	TypeModifiers: ValueModifierLayer,
 	VisualState: string,
 	SizeScale: number,
 	TravelScale: number,
+	ReadyForSale: boolean,
 }
 
 export type SimulationConfig = {
 	MaxActiveItems: number?,
 	MaxItemValue: number?,
+	MaxCoins: number?,
 	SpawnIntervalSeconds: number?,
 	TravelTimePerSlotSeconds: number?,
 	MaxCatchUpSpawnsPerStep: number?,
@@ -49,6 +81,7 @@ export type Snapshot = {
 
 local FactorySimulation = {}
 FactorySimulation.__index = FactorySimulation
+local CUBE_RARITY_RANKS = { Common = 1, Uncommon = 2, Rare = 3, Epic = 4, Legendary = 5 }
 
 local function isFinitePositive(value: any): boolean
 	if type(value) ~= "number" then
@@ -72,12 +105,14 @@ function FactorySimulation.new(config: SimulationConfig?): any
 	local self = setmetatable({
 		maxActiveItems = provided.MaxActiveItems or FactoryConfig.MaxActiveItems,
 		maxItemValue = provided.MaxItemValue or FactoryConfig.MaxItemValue,
+		maxCoins = provided.MaxCoins or FactoryConfig.MaxCoins,
 		spawnIntervalSeconds = provided.SpawnIntervalSeconds or FactoryConfig.SpawnIntervalSeconds,
 		travelTimePerSlotSeconds = provided.TravelTimePerSlotSeconds or FactoryConfig.TravelTimePerSlotSeconds,
 		maxCatchUpSpawnsPerStep = provided.MaxCatchUpSpawnsPerStep or FactoryConfig.MaxCatchUpSpawnsPerStep,
 		usesConfiguredSpawnInterval = provided.SpawnIntervalSeconds ~= nil,
 		timeSeconds = 0,
 		nextSpawnAt = 0,
+		nextSaleAt = 0,
 		nextItemId = 0,
 		coins = 0,
 		activeItems = {},
@@ -139,12 +174,17 @@ function FactorySimulation:_spawnItem()
 	table.insert(self.activeItems, {
 		Id = self.nextItemId,
 		Value = math.min(producer.OutputValue or 1, self.maxItemValue),
+		BaseValue = math.min(producer.OutputValue or 1, self.maxItemValue),
+		ModifierLabels = {},
 		SlotIndex = 1,
 		TimeRemaining = self.travelTimePerSlotSeconds,
 		SourceMachineId = producer.Id,
+		TypeId = producer.OutputType or "Standard",
+		TypeModifiers = table.clone(producer.TypeModifiers or {}),
 		VisualState = "Base",
 		SizeScale = 1,
 		TravelScale = 1,
+		ReadyForSale = false,
 	})
 end
 
@@ -157,8 +197,27 @@ function FactorySimulation:_processItemAtSlot(item: Item): boolean
 
 	if definition.Category == "Processor" then
 		local behavior = definition.Behavior or "MultiplyValue"
+		local label = definition.DisplayName
+		if behavior == "MultiplyValue" or behavior == "Goldenize" then
+			label ..= " ×" .. NumberFormatter.format(definition.Multiplier or 1)
+		elseif behavior == "TypeMultiplier" then
+			label ..= " ×" .. NumberFormatter.format(definition.Multiplier or 1)
+		elseif behavior == "ScaleVisual" then
+			label ..= " · size ×" .. NumberFormatter.format(definition.SizeScale or 1)
+		elseif behavior == "AdjustThroughput" then
+			label ..= " · speed ×" .. NumberFormatter.format(1 / (definition.TravelScale or 1))
+		elseif behavior == "RandomMultiplier" then
+			label ..= " ×" .. NumberFormatter.format(if item.Id % 2 == 0 then 3 else 0.5)
+		end
+		if #item.ModifierLabels < FactoryConfig.MaxItemModifierLabels then
+			table.insert(item.ModifierLabels, label)
+		end
 		if behavior == "MultiplyValue" then
 			item.Value = math.min(item.Value * (definition.Multiplier or 1), self.maxItemValue)
+		elseif behavior == "TypeMultiplier" then
+			if item.TypeId == definition.TypeFilter then
+				item.Value = math.min(item.Value * (definition.Multiplier or 1), self.maxItemValue)
+			end
 		elseif behavior == "ScaleVisual" then
 			item.SizeScale = math.min(item.SizeScale * (definition.SizeScale or 1), 4)
 		elseif behavior == "SetMaterial" then
@@ -171,37 +230,58 @@ function FactorySimulation:_processItemAtSlot(item: Item): boolean
 				table.insert(self.pendingItems, {
 					Id = self.nextItemId,
 					Value = item.Value,
+					BaseValue = item.BaseValue,
+					ModifierLabels = table.clone(item.ModifierLabels),
 					SlotIndex = item.SlotIndex + 1,
 					TimeRemaining = self.travelTimePerSlotSeconds,
 					SourceMachineId = item.SourceMachineId,
+					TypeId = item.TypeId,
+					TypeModifiers = table.clone(item.TypeModifiers),
 					VisualState = item.VisualState,
 					SizeScale = item.SizeScale,
 					TravelScale = item.TravelScale,
+					ReadyForSale = false,
 				})
 			end
 		elseif behavior == "Goldenize" then
 			item.Value = math.min(item.Value * (definition.Multiplier or 1), self.maxItemValue)
 			item.VisualState = definition.VisualState or "Golden"
 		elseif behavior == "RandomMultiplier" then
-			local multiplier = if item.Id % 2 == 0 then 3 else 0.5
-			item.Value = math.max(1, math.min(math.floor(item.Value * multiplier), self.maxItemValue))
+			local chance = definition.BonusChance
+			local multiplier = if chance == nil
+				then (if item.Id % 2 == 0 then 3 else 0.5)
+				else (if chance > 0 and item.Id % math.max(1, math.floor(1 / chance + 0.5)) == 0 then definition.BonusMultiplier or 2 else 1)
+			if multiplier ~= 1 then
+				item.Value = math.max(1, math.min(math.floor(item.Value * multiplier * 100 + 0.5) / 100, self.maxItemValue))
+			end
 		end
 		self.processedItems += 1
 	elseif definition.Category == "Seller" then
-		self.coins += item.Value
-		self.totalValueSold += item.Value
-		self.soldItems += 1
-		return true
+		item.ReadyForSale = true
+		item.TimeRemaining = 0
 	end
 
 	return false
 end
 
 function FactorySimulation:_advanceItem(item: Item, deltaTime: number): boolean
+	if item.ReadyForSale then
+		return false
+	end
+	local currentDefinition = MachineDefinitions.get(self.route[item.SlotIndex])
+	if currentDefinition and currentDefinition.Category == "Seller" then
+		item.ReadyForSale = true
+		item.TimeRemaining = 0
+		return false
+	end
+
 	item.TimeRemaining -= deltaTime
 	while item.TimeRemaining <= 1e-9 do
 		if self:_processItemAtSlot(item) then
 			return true
+		end
+		if item.ReadyForSale then
+			return false
 		end
 
 		item.SlotIndex += 1
@@ -210,6 +290,12 @@ function FactorySimulation:_advanceItem(item: Item, deltaTime: number): boolean
 			-- definition from retaining an item forever if the route changes later.
 			return true
 		end
+		local nextDefinition = MachineDefinitions.get(self.route[item.SlotIndex])
+		if nextDefinition and nextDefinition.Category == "Seller" then
+			item.ReadyForSale = true
+			item.TimeRemaining = 0
+			return false
+		end
 
 		item.TimeRemaining += self.travelTimePerSlotSeconds * item.TravelScale
 		item.TravelScale = 1
@@ -217,13 +303,94 @@ function FactorySimulation:_advanceItem(item: Item, deltaTime: number): boolean
 	return false
 end
 
-function FactorySimulation:step(deltaTime: number)
+local function sellerModifiersFor(item: Item, seller: any, soldItems: number): ValueModifierLayer
+	local modifiers = table.clone(seller.SaleModifiers or { AdditiveBonus = 0, Multiplier = 1 })
+	local payoutMultiplier = 1
+	local behavior = seller.Behavior or "Payout"
+	if behavior == "ConditionalPayout" and item.Value >= (seller.MinimumValue or math.huge) then
+		payoutMultiplier = seller.PayoutMultiplier or 1
+	elseif behavior == "TypePayout" and item.TypeId == seller.TypeFilter then
+		payoutMultiplier = seller.PayoutMultiplier or 1
+	elseif behavior == "ChancePayout" then
+		local denominator = math.max(1, math.floor(1 / math.max(seller.BonusChance or 0, 0.000001) + 0.5))
+		payoutMultiplier = if item.Id % denominator == 0 then seller.BonusMultiplier or 1 else 1
+	elseif behavior == "StreakPayout" then
+		payoutMultiplier = if (soldItems + 1) % (seller.BonusEvery or math.huge) == 0 then seller.BonusMultiplier or 1 else 1
+	elseif behavior == "RarityPayout" then
+		local cubeType = CubeTypeDefinitions.get(item.TypeId)
+		if cubeType and (CUBE_RARITY_RANKS[cubeType.Rarity] or 0) >= (CUBE_RARITY_RANKS[seller.RequiredCubeRarity or "Epic"] or 4) then
+			payoutMultiplier = seller.PayoutMultiplier or 1
+		end
+	elseif behavior == "Payout" then
+		payoutMultiplier = seller.PayoutMultiplier or 1
+	end
+	modifiers.Multiplier = (modifiers.Multiplier or 1) * payoutMultiplier
+	return modifiers
+end
+
+function FactorySimulation:getSaleModifiers(itemId: number): ValueModifierLayer?
+	local seller = MachineDefinitions.get(self.route[#self.route])
+	if not seller or seller.Category ~= "Seller" then return nil end
+	for _, item in ipairs(self.activeItems) do
+		if item.Id == itemId then return sellerModifiersFor(item, seller, self.soldItems) end
+	end
+	return nil
+end
+
+function FactorySimulation:sellItem(itemId: any, buffModifiers: ValueModifierLayer?): (boolean, number?)
+	if type(itemId) ~= "number" or itemId % 1 ~= 0 or itemId < 1 then
+		return false, nil
+	end
+
+	local seller = MachineDefinitions.get(self.route[#self.route])
+	if not seller or seller.Category ~= "Seller" then
+		return false, nil
+	end
+
+	if self.timeSeconds < self.nextSaleAt then
+		return false, nil
+	end
+
+	for index, item in ipairs(self.activeItems) do
+		if item.Id == itemId then
+			if not item.ReadyForSale then
+				return false, nil
+			end
+
+			local saleModifiers = sellerModifiersFor(item, seller, self.soldItems)
+			local saleValue = SaleValueRules.calculate(
+				item.Value,
+				item.TypeModifiers,
+				buffModifiers,
+				saleModifiers,
+				self.maxItemValue
+			)
+			if not saleValue then
+				return false, nil
+			end
+
+			local credited = math.min(saleValue, math.max(0, self.maxCoins - self.coins))
+			table.remove(self.activeItems, index)
+			self.coins += credited
+			self.totalValueSold = math.min(self.totalValueSold + credited, self.maxCoins)
+			self.nextSaleAt = self.timeSeconds + (seller.SaleIntervalSeconds or 0)
+			self.soldItems += 1
+			return true, credited
+		end
+	end
+
+	return false, nil
+end
+
+function FactorySimulation:step(deltaTime: number): (boolean, boolean)
 	assert(type(deltaTime) == "number" and deltaTime == deltaTime, "deltaTime must be a number")
 	assert(deltaTime >= 0 and deltaTime <= 60, "deltaTime must be between 0 and 60 seconds")
 	if deltaTime == 0 then
-		return
+		return false, false
 	end
 
+	local producedBefore = self.producedItems
+	local soldBefore = self.soldItems
 	self.timeSeconds += deltaTime
 	self.pendingItems = {}
 	local spawnCount = 0
@@ -252,6 +419,12 @@ function FactorySimulation:step(deltaTime: number)
 			self.droppedItemsAtCap += 1
 		end
 	end
+	table.clear(self.pendingItems)
+	return self.producedItems > producedBefore, self.soldItems > soldBefore
+end
+
+function FactorySimulation:getCoins(): number
+	return self.coins
 end
 
 function FactorySimulation:getSnapshot(): Snapshot
@@ -284,7 +457,7 @@ function FactorySimulation:grantCoins(amount: number): boolean
 	if type(amount) ~= "number" or amount ~= amount or amount < 0 or amount == math.huge then
 		return false
 	end
-	self.coins = math.min(self.coins + amount, self.maxItemValue)
+	self.coins = math.min(self.coins + amount, self.maxCoins)
 	return true
 end
 
@@ -292,7 +465,7 @@ function FactorySimulation:setCoins(amount: any): boolean
 	if type(amount) ~= "number" or amount ~= amount or amount < 0 or amount == math.huge then
 		return false
 	end
-	self.coins = math.min(amount, self.maxItemValue)
+	self.coins = math.min(amount, self.maxCoins)
 	return true
 end
 
@@ -302,12 +475,17 @@ function FactorySimulation:getActiveItemsForDebug(): { Item }
 		result[index] = {
 			Id = item.Id,
 			Value = item.Value,
+			BaseValue = item.BaseValue,
+			ModifierLabels = table.clone(item.ModifierLabels),
 			SlotIndex = item.SlotIndex,
 			TimeRemaining = item.TimeRemaining,
 			SourceMachineId = item.SourceMachineId,
+			TypeId = item.TypeId,
+			TypeModifiers = table.clone(item.TypeModifiers),
 			VisualState = item.VisualState,
 			SizeScale = item.SizeScale,
 			TravelScale = item.TravelScale,
+			ReadyForSale = item.ReadyForSale,
 		}
 	end
 	return result
@@ -317,6 +495,7 @@ function FactorySimulation.validateConfiguration(config: SimulationConfig?): (bo
 	local provided = config or {}
 	local maxActiveItems = provided.MaxActiveItems or FactoryConfig.MaxActiveItems
 	local maxItemValue = provided.MaxItemValue or FactoryConfig.MaxItemValue
+	local maxCoins = provided.MaxCoins or FactoryConfig.MaxCoins
 	local spawnInterval = provided.SpawnIntervalSeconds or FactoryConfig.SpawnIntervalSeconds
 	local travelTime = provided.TravelTimePerSlotSeconds or FactoryConfig.TravelTimePerSlotSeconds
 	local maxCatchUp = provided.MaxCatchUpSpawnsPerStep or FactoryConfig.MaxCatchUpSpawnsPerStep
@@ -326,6 +505,9 @@ function FactorySimulation.validateConfiguration(config: SimulationConfig?): (bo
 	end
 	if not isFinitePositive(maxItemValue) then
 		return false, "MaxItemValue must be finite and positive"
+	end
+	if not isFinitePositive(maxCoins) or maxCoins % 1 ~= 0 or maxCoins > FactoryConfig.MaxCoins then
+		return false, "MaxCoins must be a positive safe integer"
 	end
 	if not isFinitePositive(spawnInterval) or not isFinitePositive(travelTime) then
 		return false, "Timing values must be finite and positive"

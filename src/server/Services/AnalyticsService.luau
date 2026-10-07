@@ -1,6 +1,7 @@
 --!strict
 
 local Players = game:GetService("Players")
+local RobloxAnalytics = game:GetService("AnalyticsService")
 
 local AnalyticsService = {}
 local counters = {}
@@ -27,6 +28,9 @@ function AnalyticsService.record(player: Player, eventName: string, amount: numb
 	local nextValue = math.min(current + increment, 1_000_000)
 	counters[player][eventName] = nextValue
 	player:SetAttribute(attributeName(eventName), nextValue)
+	pcall(function()
+		RobloxAnalytics:LogCustomEvent(player, eventName, increment)
+	end)
 end
 
 function AnalyticsService.restore(player: Player, snapshot: any)

@@ -1,11 +1,20 @@
 --!strict
 
 local FactorySimulation = require("../src/shared/FactorySimulation")
+local FactoryConfig = require("../src/shared/FactoryConfig")
 local MachineDefinitions = require("../src/shared/MachineDefinitions")
 
 local function expect(condition: boolean, message: string)
 	if not condition then
 		error(message, 2)
+	end
+end
+
+local function confirmSellerHitboxContacts(simulation: any)
+	for _, item in ipairs(simulation:getActiveItemsForDebug()) do
+		if item.ReadyForSale then
+			simulation:sellItem(item.Id, { AdditiveBonus = 0, Multiplier = 1 })
+		end
 	end
 end
 
@@ -23,6 +32,7 @@ local simulation = FactorySimulation.new({
 
 for _ = 1, 8 do
 	simulation:step(0.25)
+	confirmSellerHitboxContacts(simulation)
 end
 
 local snapshot = simulation:getSnapshot()
@@ -49,8 +59,10 @@ expect(not invalidType, "non-numeric timing must be rejected")
 
 local firstFactory = FactorySimulation.new()
 local secondFactory = FactorySimulation.new()
-firstFactory:step(2)
+firstFactory:step(FactoryConfig.TravelTimePerSlotSeconds * 3 + 1)
+confirmSellerHitboxContacts(firstFactory)
 secondFactory:step(0.5)
+confirmSellerHitboxContacts(secondFactory)
 local firstSnapshot = firstFactory:getSnapshot()
 local secondSnapshot = secondFactory:getSnapshot()
 expect(firstSnapshot.Coins ~= secondSnapshot.Coins, "factories must simulate independently")

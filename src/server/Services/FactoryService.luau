@@ -6,7 +6,13 @@ local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local FactoryConfig = require(Shared:WaitForChild("FactoryConfig"))
+local CubeTypeDefinitions = require(Shared:WaitForChild("CubeTypeDefinitions"))
+local MachineVisualConfig = require(Shared:WaitForChild("MachineVisualConfig"))
 local FactoryLayout = require(Shared:WaitForChild("FactoryLayout"))
+local FactoryItemGeometry = require(Shared:WaitForChild("FactoryItemGeometry"))
+local SaleValueRules = require(Shared:WaitForChild("SaleValueRules"))
+local NumberFormatter = require(Shared:WaitForChild("NumberFormatter"))
+local MachineModelBuilder = require(script.Parent.MachineModelBuilder)
 local FactorySimulation = require(Shared:WaitForChild("FactorySimulation"))
 local MachineDefinitions = require(Shared:WaitForChild("MachineDefinitions"))
 local PlacementRules = require(Shared:WaitForChild("PlacementRules"))
@@ -19,6 +25,9 @@ local lastRequestAt = {}
 local started = false
 local nextPlotIndex = 0
 local attributeUpdateAccumulator = 0
+local visualUpdateAccumulator = 0
+local VISUAL_UPDATE_INTERVAL_SECONDS = 1 / 20
+local cubeTypeColorCache = {}
 
 local function copyInventory(inventory: { [string]: number }): { [string]: number }
 	local result = {}
@@ -50,7 +59,164 @@ local function createPart(parent: Instance, name: string, size: Vector3, positio
 	return part
 end
 
-local function createPlaceholderPlot(player: Player): (Folder, Vector3)
+local function addSlotClickDetector(part: BasePart, slotIndex: number)
+	part:SetAttribute("FactorySlotIndex", slotIndex)
+	if not FactoryLayout.isEditableMachineSlot(slotIndex) then
+		return
+	end
+	local detector = Instance.new("ClickDetector")
+	detector.Name = "FactorySlotClick"
+	detector.MaxActivationDistance = 32
+	detector:SetAttribute("FactorySlotIndex", slotIndex)
+	detector.Parent = part
+end
+
+local function colorFromRgb(channels: { number }): Color3
+	return Color3.fromRGB(channels[1], channels[2], channels[3])
+end
+
+local function overlapsHitbox(hitbox: BasePart, item: BasePart): boolean
+	local localPosition = hitbox.CFrame:PointToObjectSpace(item.Position)
+	return FactoryItemGeometry.overlapsBox(localPosition.X, localPosition.Y, localPosition.Z, hitbox.Size.X, hitbox.Size.Y, hitbox.Size.Z, item.Size.X)
+end
+
+local function getSaleBuffModifiers(player: Player): { [string]: number? }
+	-- EconomyService owns these server-side attributes. Missing attributes remain neutral.
+	local expiresAt = player:GetAttribute("FactorySaleValueExpiresAt")
+	if type(expiresAt) ~= "number" or expiresAt <= workspace:GetServerTimeNow() then
+		return { AdditiveBonus = 0, Multiplier = 1 }
+	end
+	return {
+		AdditiveBonus = player:GetAttribute("FactorySaleValueAdditiveBonus"),
+		Multiplier = player:GetAttribute("FactorySaleValueMultiplier"),
+	}
+end
+
+local function createConveyor(plot: Folder, origin: Vector3): Folder
+	local conveyorConfig = MachineVisualConfig.Conveyor
+	local slotPitch = MachineVisualConfig.SlotPitch
+	local slotCount = FactoryLayout.SlotCount
+	local segmentLength = slotPitch + conveyorConfig.SegmentOverlap
+	local totalLength = (slotCount - 1) * slotPitch + segmentLength
+	local centerOffsetX = (slotCount - 1) * slotPitch / 2
+	local deckTop = conveyorConfig.DeckCenterY + conveyorConfig.DeckThickness / 2 + conveyorConfig.Elevation
+
+	local conveyor = Instance.new("Folder")
+	conveyor.Name = "Conveyor"
+	conveyor.Parent = plot
+	conveyor:SetAttribute("SlotCount", slotCount)
+
+	local underframe = createPart(
+		conveyor,
+		"ConveyorUnderframe",
+		Vector3.new(
+			totalLength + conveyorConfig.FrameLengthPadding,
+			conveyorConfig.FrameHeight,
+			conveyorConfig.BeltWidth + conveyorConfig.FrameWidthPadding
+		),
+		origin + Vector3.new(centerOffsetX, conveyorConfig.FrameCenterY + conveyorConfig.Elevation, 0),
+		colorFromRgb(conveyorConfig.FrameColor)
+	)
+	underframe.Material = Enum.Material.Metal
+
+	for slotIndex = 1, slotCount do
+		local offset = (slotIndex - 1) * slotPitch
+		local isSellerBay = slotIndex == FactoryLayout.SellerSlotIndex
+		local belt = createPart(
+			conveyor,
+			string.format("Conveyor_%d", slotIndex),
+			Vector3.new(segmentLength, conveyorConfig.DeckThickness, conveyorConfig.BeltWidth),
+			origin + Vector3.new(offset, conveyorConfig.DeckCenterY + conveyorConfig.Elevation, 0),
+			colorFromRgb(if isSellerBay then conveyorConfig.SellerBay.DeckColor else conveyorConfig.DeckColor)
+		)
+		belt.Material = Enum.Material.Rubber
+		addSlotClickDetector(belt, slotIndex)
+
+		for rollerIndex = 1, conveyorConfig.RollerCountPerSlot do
+			local rollerOffset = -slotPitch / 2 + ((rollerIndex - 0.5) * slotPitch / conveyorConfig.RollerCountPerSlot)
+			local rollerPosition = origin + Vector3.new(offset + rollerOffset, conveyorConfig.RollerCenterY + conveyorConfig.Elevation, 0)
+			local roller = createPart(
+				conveyor,
+				string.format("ConveyorRoller_%d_%d", slotIndex, rollerIndex),
+				Vector3.new(
+					conveyorConfig.BeltWidth + conveyorConfig.RollerOverhang,
+					conveyorConfig.RollerDiameter,
+					conveyorConfig.RollerDiameter
+				),
+				rollerPosition,
+				colorFromRgb(conveyorConfig.RollerColor)
+			)
+			roller.Shape = Enum.PartType.Cylinder
+			roller.CFrame = CFrame.new(rollerPosition) * CFrame.Angles(0, math.rad(90), 0)
+			roller.Material = Enum.Material.Metal
+			addSlotClickDetector(roller, slotIndex)
+		end
+
+		for sideIndex, side in ipairs({ -1, 1 }) do
+			local guideOffset = side * (conveyorConfig.BeltWidth / 2 + conveyorConfig.GuideThickness / 2)
+			local guidePosition = origin + Vector3.new(offset, deckTop + conveyorConfig.GuideHeight / 2, guideOffset)
+			local guide = createPart(
+				conveyor,
+				string.format("ConveyorGuide_%d_%d", slotIndex, sideIndex),
+				Vector3.new(segmentLength, conveyorConfig.GuideHeight, conveyorConfig.GuideThickness),
+				guidePosition,
+				colorFromRgb(conveyorConfig.GuideColor)
+			)
+			guide.Material = Enum.Material.Metal
+			addSlotClickDetector(guide, slotIndex)
+
+			local accent = createPart(
+				conveyor,
+				string.format("ConveyorGuideAccent_%d_%d", slotIndex, sideIndex),
+				Vector3.new(segmentLength, conveyorConfig.GuideAccentHeight, conveyorConfig.GuideAccentThickness),
+				origin + Vector3.new(
+					offset,
+					deckTop + conveyorConfig.GuideHeight - conveyorConfig.GuideAccentHeight / 2,
+					guideOffset
+				),
+				colorFromRgb(if isSellerBay then conveyorConfig.SellerBay.AccentColor else conveyorConfig.GuideAccentColor)
+			)
+			accent.Material = Enum.Material.Neon
+			addSlotClickDetector(accent, slotIndex)
+
+			for supportIndex, supportOffset in ipairs({ -conveyorConfig.SupportOffsetX, conveyorConfig.SupportOffsetX }) do
+				local support = createPart(
+					conveyor,
+					string.format("ConveyorSupport_%d_%d_%d", slotIndex, sideIndex, supportIndex),
+					Vector3.new(conveyorConfig.SupportThickness, conveyorConfig.SupportHeight + conveyorConfig.Elevation, conveyorConfig.SupportThickness),
+					origin + Vector3.new(offset + supportOffset, (conveyorConfig.SupportHeight + conveyorConfig.Elevation) / 2, guideOffset),
+					colorFromRgb(conveyorConfig.SupportColor)
+				)
+				support.Material = Enum.Material.Metal
+			end
+		end
+
+		local areaLabel = Instance.new("BillboardGui")
+		areaLabel.Name = string.format("ConveyorAreaLabel_%d", slotIndex)
+		areaLabel.Adornee = belt
+		areaLabel.AlwaysOnTop = true
+		areaLabel.MaxDistance = conveyorConfig.LabelMaxDistance
+		areaLabel.Size = UDim2.fromOffset(conveyorConfig.LabelWidthPixels, conveyorConfig.LabelHeightPixels)
+		areaLabel.StudsOffset = Vector3.new(0, conveyorConfig.LabelHeight, conveyorConfig.BeltWidth / 2 + conveyorConfig.GuideThickness + 0.2)
+		areaLabel.Parent = belt
+
+		local areaText = Instance.new("TextLabel")
+		areaText.Name = "Label"
+		areaText.BackgroundTransparency = 1
+		areaText.Size = UDim2.fromScale(1, 1)
+		areaText.Text = FactoryLayout.getAreaLabel(slotIndex)
+		areaText.TextColor3 = colorFromRgb(if isSellerBay then conveyorConfig.SellerBay.LabelColor else conveyorConfig.LabelColor)
+		areaText.TextSize = conveyorConfig.LabelTextSize
+		areaText.TextStrokeColor3 = colorFromRgb(conveyorConfig.FrameColor)
+		areaText.TextStrokeTransparency = 0.2
+		areaText.Font = Enum.Font.GothamBold
+		areaText.Parent = areaLabel
+	end
+
+	return conveyor
+end
+
+local function createPlaceholderPlot(player: Player): (Folder, Vector3, Folder)
 	local plotsFolder = workspace:FindFirstChild("TinyFactoryPlots")
 	if not plotsFolder then
 		plotsFolder = Instance.new("Folder")
@@ -58,21 +224,32 @@ local function createPlaceholderPlot(player: Player): (Folder, Vector3)
 		plotsFolder.Parent = workspace
 	end
 
+	local plotConfig = MachineVisualConfig.FactoryPlot
 	nextPlotIndex += 1
-	local origin = Vector3.new((nextPlotIndex - 1) * 36, 0, 0)
+	local origin = Vector3.new((nextPlotIndex - 1) * plotConfig.SpacingX, 0, 0)
 	local plot = Instance.new("Folder")
-	plot.Name = `Factory_{player.UserId}`
+	plot.Name = string.format("Factory_%d", player.UserId)
 	plot:SetAttribute("OwnerUserId", player.UserId)
 	plot.Parent = plotsFolder
 
-	createPart(plot, "PlotBase", Vector3.new(30, 0.5, 8), origin + Vector3.new(12, -0.25, 0), Color3.fromRGB(73, 55, 42))
-	for slotIndex = 0, FactoryLayout.SlotCount - 1 do
-		local belt = createPart(plot, `Conveyor_{slotIndex + 1}`, Vector3.new(5.5, 0.15, 2), origin + Vector3.new(slotIndex * 6, 0.1, 0), Color3.fromRGB(66, 75, 84))
-		belt.Material = Enum.Material.Metal
-		local stripe = createPart(plot, `ConveyorGuide_{slotIndex + 1}`, Vector3.new(4.2, 0.02, 0.16), origin + Vector3.new(slotIndex * 6, 0.2, 0), Color3.fromRGB(90, 210, 230))
-		stripe.Material = Enum.Material.Neon
-	end
-	return plot, origin
+	local slotCount = FactoryLayout.SlotCount
+	local slotPitch = MachineVisualConfig.SlotPitch
+	local conveyorConfig = MachineVisualConfig.Conveyor
+	local segmentLength = slotPitch + conveyorConfig.SegmentOverlap
+	local conveyorLength = (slotCount - 1) * slotPitch + segmentLength
+	local centerOffsetX = (slotCount - 1) * slotPitch / 2
+	local base = createPart(
+		plot,
+		"FactoryPlatform",
+		Vector3.new(conveyorLength + plotConfig.BaseLengthPadding, plotConfig.BaseThickness, plotConfig.BaseWidth),
+		origin + Vector3.new(centerOffsetX, plotConfig.BaseCenterY, 0),
+		colorFromRgb(plotConfig.BaseColor)
+	)
+	base.Material = Enum.Material.WoodPlanks
+	base.CanCollide = true
+
+	local conveyor = createConveyor(plot, origin)
+	return plot, origin, conveyor
 end
 
 local function updateDebugAttributes(player: Player, factory: any)
@@ -95,102 +272,134 @@ local function refreshMachineVisuals(factory: any)
 	machineFolder = Instance.new("Folder")
 	machineFolder.Name = "Machines"
 	machineFolder.Parent = factory.plot
+	factory.sellerHitbox = nil
 
-	local colors = {
-		Producer = Color3.fromRGB(82, 145, 255),
-		Processor = Color3.fromRGB(255, 194, 66),
-		Seller = Color3.fromRGB(83, 207, 113),
-	}
-	local shapes = {
-		Producer = Enum.PartType.Cylinder,
-		Processor = Enum.PartType.Block,
-		Seller = Enum.PartType.Ball,
-	}
+	for slotIndex = 1, FactoryLayout.EditableSlotCount do
+		local belt = factory.conveyor:FindFirstChild(string.format("Conveyor_%d", slotIndex))
+		local detector = belt and belt:FindFirstChild("FactorySlotClick")
+		if detector and detector:IsA("ClickDetector") then
+			detector.MaxActivationDistance = 32
+		end
+	end
+
 	for slotIndex = 1, FactoryLayout.SlotCount do
 		local machineId = factory.layout[slotIndex]
 		if machineId then
 			local definition = MachineDefinitions.get(machineId)
 			if definition then
-				local machinePart = createPart(
-					machineFolder,
-					`Slot_{slotIndex}_{machineId}`,
-					Vector3.new(2, 2, 2),
-					factory.origin + Vector3.new((slotIndex - 1) * 6, 1.1, 0),
-					colors[definition.Category] or Color3.fromRGB(235, 235, 235)
-				)
-				machinePart.Shape = shapes[definition.Category] or Enum.PartType.Block
-				machinePart.Material = if definition.Rarity == "Legendary" or definition.Rarity == "Epic" then Enum.Material.Neon else Enum.Material.SmoothPlastic
-				machinePart:SetAttribute("MachineId", definition.Id)
-				machinePart:SetAttribute("DisplayName", definition.DisplayName)
-				machinePart:SetAttribute("Description", definition.Description)
-				machinePart:SetAttribute("Rarity", definition.Rarity)
-				machinePart:SetAttribute("Behavior", definition.Behavior or "Infrastructure")
+				local model, clickPart, sellerHitbox = MachineModelBuilder.build(machineFolder, factory.origin, slotIndex, definition)
+				if sellerHitbox then factory.sellerHitbox = sellerHitbox end
+				for _, part in ipairs(model:GetChildren()) do
+					if part:IsA("BasePart") and part ~= sellerHitbox then addSlotClickDetector(part, slotIndex) end
+				end
+				clickPart:SetAttribute("MachineId", definition.Id)
+				clickPart:SetAttribute("DisplayName", definition.DisplayName)
+				clickPart:SetAttribute("Description", definition.Description)
+				clickPart:SetAttribute("Rarity", definition.Rarity)
+				clickPart:SetAttribute("Behavior", definition.Behavior or definition.Category)
 
-				local labelGui = Instance.new("BillboardGui")
-				labelGui.Name = "MachineLabel"
-				labelGui.Adornee = machinePart
-				labelGui.AlwaysOnTop = true
-				labelGui.MaxDistance = 80
-				labelGui.Size = UDim2.fromOffset(150, 42)
-				labelGui.StudsOffset = Vector3.new(0, 1.7, 0)
-				labelGui.Parent = machinePart
-
-				local label = Instance.new("TextLabel")
-				label.BackgroundColor3 = Color3.fromRGB(28, 24, 21)
-				label.BackgroundTransparency = 0.2
-				label.BorderSizePixel = 0
-				label.Size = UDim2.fromScale(1, 1)
-				label.Text = `{definition.DisplayName}\n{definition.Rarity}`
-				label.TextColor3 = Color3.fromRGB(255, 255, 255)
-				label.TextSize = 11
-				label.TextWrapped = true
-				label.Font = Enum.Font.GothamBold
-				label.Parent = labelGui
 			end
 		end
 	end
 end
 
-local function updateVisualItems(factory: any)
+local function updateVisualItems(player: Player, factory: any): boolean
 	local activeItems = factory.simulation:getActiveItemsForDebug()
-	local snapshot = factory.simulation:getSnapshot()
 	local activeById = {}
+	local visualConfig = MachineVisualConfig.ConveyorItem
+	local buffModifiers = getSaleBuffModifiers(player)
+	local seller = MachineDefinitions.get(factory.layout[FactoryLayout.SellerSlotIndex])
+	local soldAny = false
+	factory.itemPresentationState = factory.itemPresentationState or {}
+	local function setAttribute(part: BasePart, name: string, value: any)
+		if part:GetAttribute(name) ~= value then part:SetAttribute(name, value) end
+	end
 	for _, item in ipairs(activeItems) do
 		activeById[item.Id] = true
 		local visual = factory.visualItems[item.Id]
 		if not visual then
-			visual = createPart(factory.plot, `Item_{item.Id}`, Vector3.new(0.9, 0.9, 0.9), factory.origin + Vector3.new(0, 1, 0), Color3.fromRGB(235, 235, 235))
+			visual = createPart(factory.plot, string.format("Item_%d", item.Id), Vector3.new(visualConfig.Size, visualConfig.Size, visualConfig.Size), factory.origin + Vector3.new(0, visualConfig.DropStartHeight + MachineVisualConfig.Conveyor.Elevation, 0), Color3.fromRGB(235, 235, 235))
+			visual:SetAttribute("FactoryItem", true)
+			visual:SetAttribute("OwnerUserId", player.UserId)
+			visual:SetAttribute("ItemId", item.Id)
 			factory.visualItems[item.Id] = visual
 		end
+		local cubeColor = cubeTypeColorCache[item.TypeId]
+		if not cubeColor then
+			local cubeType = CubeTypeDefinitions.get(item.TypeId)
+			local color = cubeType and cubeType.Color
+			cubeColor = if color then Color3.fromRGB(color[1], color[2], color[3]) else Color3.fromRGB(235, 235, 235)
+			cubeTypeColorCache[item.TypeId] = cubeColor
+		end
 		local stateColors = {
-			Base = Color3.fromRGB(235, 235, 235),
+			Base = cubeColor,
 			Painted = Color3.fromRGB(255, 105, 160),
 			Golden = Color3.fromRGB(255, 211, 66),
 		}
-		local size = 0.9 * math.clamp(item.SizeScale or 1, 0.5, 4)
-		visual.Size = Vector3.new(size, size, size)
-		visual.Color = stateColors[item.VisualState] or stateColors.Base
+		local size = visualConfig.Size * math.clamp(item.SizeScale or 1, 0.5, 4)
+		local nextSize = Vector3.new(size, size, size)
+		if visual.Size ~= nextSize then visual.Size = nextSize end
+		local nextColor = stateColors[item.VisualState] or stateColors.Base
+		if visual.Color ~= nextColor then visual.Color = nextColor end
 
-		local routeMachineId = snapshot.Route[item.SlotIndex]
-		local visualSlotIndex = 1
-		for slotIndex = 1, FactoryLayout.SlotCount do
-			if factory.layout[slotIndex] == routeMachineId then
-				visualSlotIndex = slotIndex
-				break
+		local x, y = FactoryItemGeometry.itemPosition(factory.layout, item)
+		local nextPosition = factory.origin + Vector3.new(x, y, 0)
+		if visual.Position ~= nextPosition then visual.Position = nextPosition end
+		local cache = factory.itemPresentationState[item.Id]
+		local sellerModifiers = factory.simulation:getSaleModifiers(item.Id) or (seller and seller.SaleModifiers)
+		local typeAdd, typeMult = item.TypeModifiers.AdditiveBonus or 0, item.TypeModifiers.Multiplier or 1
+		local buffAdd, buffMult = buffModifiers.AdditiveBonus or 0, buffModifiers.Multiplier or 1
+		local sellerAdd, sellerMult = if sellerModifiers then sellerModifiers.AdditiveBonus or 0 else 0, if sellerModifiers then sellerModifiers.Multiplier or 1 else 1
+		if not cache or cache.Value ~= item.Value or cache.Count ~= #item.ModifierLabels
+			or cache.TypeAdd ~= typeAdd or cache.TypeMult ~= typeMult
+			or cache.BuffAdd ~= buffAdd or cache.BuffMult ~= buffMult
+			or cache.SellerAdd ~= sellerAdd or cache.SellerMult ~= sellerMult then
+			local breakdown = SaleValueRules.getBreakdown(item.Value, item.TypeModifiers, buffModifiers, sellerModifiers, FactoryConfig.MaxItemValue)
+			setAttribute(visual, "ItemValue", item.Value)
+			setAttribute(visual, "ItemBaseValue", item.BaseValue)
+			setAttribute(visual, "ItemType", item.TypeId)
+			setAttribute(visual, "ItemModifiers", table.concat(item.ModifierLabels, " · "))
+			setAttribute(visual, "ItemChainMultiplier", item.Value / item.BaseValue)
+			if breakdown then
+				setAttribute(visual, "ItemSaleValue", breakdown.Value)
+				setAttribute(visual, "ItemSaleMultiplier", breakdown.Multiplier)
+				setAttribute(visual, "ItemAdditiveBonus", breakdown.AdditiveBonus)
+			end
+			local layers = {}
+			local function describeLayer(name: string, layer: any)
+				if layer and ((layer.AdditiveBonus or 0) ~= 0 or (layer.Multiplier or 1) ~= 1) then
+					table.insert(layers, name .. " +" .. NumberFormatter.format(layer.AdditiveBonus or 0) .. " ×" .. NumberFormatter.format(layer.Multiplier or 1))
+				end
+			end
+			describeLayer("Type", item.TypeModifiers)
+			describeLayer("Buff", buffModifiers)
+			describeLayer("Seller", sellerModifiers)
+			setAttribute(visual, "ItemSaleLayers", if #layers > 0 then table.concat(layers, " · ") else "No sale bonuses")
+			factory.itemPresentationState[item.Id] = { Value = item.Value, Count = #item.ModifierLabels,
+				TypeAdd = typeAdd, TypeMult = typeMult, BuffAdd = buffAdd, BuffMult = buffMult, SellerAdd = sellerAdd, SellerMult = sellerMult }
+		end
+
+		local sellerHitbox = factory.sellerHitbox
+		if item.ReadyForSale and sellerHitbox and overlapsHitbox(sellerHitbox, visual) then
+			local sold, credited = factory.simulation:sellItem(item.Id, buffModifiers)
+			if sold then
+				soldAny = true
+				EffectService.fire(player, "ItemSold", { Coins = credited, Balance = factory.simulation:getCoins(), Position = visual.Position, ItemId = item.Id })
+				activeById[item.Id] = nil
 			end
 		end
-		local progress = 1 - math.clamp(item.TimeRemaining / FactoryConfig.TravelTimePerSlotSeconds, 0, 1)
-		local x = (visualSlotIndex - 1) * 6 + progress * 6
-		visual.Position = factory.origin + Vector3.new(x, 1.05, 0)
-		visual:SetAttribute("ItemValue", item.Value)
 	end
+
+	if soldAny then updateDebugAttributes(player, factory) end
 
 	for itemId, visual in pairs(factory.visualItems) do
 		if not activeById[itemId] then
 			visual:Destroy()
 			factory.visualItems[itemId] = nil
+			factory.itemPresentationState[itemId] = nil
 		end
 	end
+	return soldAny
 end
 
 local function buildResponse(factory: any, success: boolean, reason: string?): { [string]: any }
@@ -252,27 +461,34 @@ local function placeMachine(player: Player, machineId: any, slotIndex: any, repl
 	if previousMachineId and replaceRequested ~= true then
 		return buildResponse(factory, false, "Slot is occupied")
 	end
-	if previousMachineId and slotIndex == FactoryLayout.SlotCount then
-		return buildResponse(factory, false, "The seller is fixed infrastructure")
-	end
 	if (factory.inventory[machineId] or 0) <= 0 then
 		return buildResponse(factory, false, "Machine is not in inventory")
 	end
 
-	factory.inventory[machineId] -= 1
-	factory.layout[slotIndex] = machineId
-	if previousMachineId then
-		factory.inventory[previousMachineId] = (factory.inventory[previousMachineId] or 0) + 1
+	local candidate, candidateError = PlacementRules.createPlacementLayout(factory.layout, machineId, slotIndex, factory.capacity)
+	if not candidate then
+		return buildResponse(factory, false, candidateError)
 	end
-	local committed, commitError = commitLayout(factory, factory.layout)
-	if not committed then
-		factory.inventory[machineId] += 1
-		if previousMachineId then
-			factory.inventory[previousMachineId] -= 1
+	local nextInventory = copyInventory(factory.inventory)
+	nextInventory[machineId] = (nextInventory[machineId] or 0) - 1
+	if nextInventory[machineId] <= 0 then
+		nextInventory[machineId] = nil
+	end
+	if previousMachineId then
+		nextInventory[previousMachineId] = (nextInventory[previousMachineId] or 0) + 1
+	end
+	for otherSlot = 1, FactoryLayout.SlotCount do
+		local oldMachineId = factory.layout[otherSlot]
+		if otherSlot ~= slotIndex and oldMachineId and candidate[otherSlot] ~= oldMachineId then
+			nextInventory[oldMachineId] = (nextInventory[oldMachineId] or 0) + 1
 		end
-		factory.layout[slotIndex] = previousMachineId
+	end
+
+	local committed, commitError = commitLayout(factory, candidate)
+	if not committed then
 		return buildResponse(factory, false, commitError)
 	end
+	factory.inventory = nextInventory
 	AnalyticsService.record(player, "MachinePlaced")
 	EffectService.fire(player, "InventoryChanged")
 	return buildResponse(factory, true)
@@ -289,26 +505,23 @@ local function removeMachine(player: Player, slotIndex: any)
 	if isRateLimited(player) then
 		return buildResponse(factory, false, "Too many requests")
 	end
-	local valid, errorMessage = PlacementRules.validateSlotIndex(slotIndex)
-	if not valid then
-		return buildResponse(factory, false, errorMessage)
-	end
-	if slotIndex == 1 or slotIndex == FactoryLayout.SlotCount then
-		return buildResponse(factory, false, "The producer and seller are required")
-	end
 	local machineId = factory.layout[slotIndex]
 	if not machineId then
 		return buildResponse(factory, false, "Slot is already empty")
 	end
-
-	factory.layout[slotIndex] = nil
-	factory.inventory[machineId] = (factory.inventory[machineId] or 0) + 1
-	local committed, commitError = commitLayout(factory, factory.layout)
+	local definition = MachineDefinitions.get(machineId)
+	if definition and (definition.Category == "Producer" or definition.Category == "Seller") then
+		return buildResponse(factory, false, "Keep the dropper at the start and a seller at the route end")
+	end
+	local candidate, candidateError = PlacementRules.createRemoveLayout(factory.layout, slotIndex, factory.capacity)
+	if not candidate then
+		return buildResponse(factory, false, candidateError)
+	end
+	local committed, commitError = commitLayout(factory, candidate)
 	if not committed then
-		factory.inventory[machineId] -= 1
-		factory.layout[slotIndex] = machineId
 		return buildResponse(factory, false, commitError)
 	end
+	factory.inventory[machineId] = (factory.inventory[machineId] or 0) + 1
 	AnalyticsService.record(player, "MachineRemoved")
 	EffectService.fire(player, "InventoryChanged")
 	return buildResponse(factory, true)
@@ -325,32 +538,12 @@ local function moveMachine(player: Player, sourceSlotIndex: any, destinationSlot
 	if isRateLimited(player) then
 		return buildResponse(factory, false, "Too many requests")
 	end
-	local sourceValid, sourceError = PlacementRules.validateSlotIndex(sourceSlotIndex)
-	local destinationValid, destinationError = PlacementRules.validateSlotIndex(destinationSlotIndex)
-	if not sourceValid then
-		return buildResponse(factory, false, sourceError)
+	local candidate, candidateError = PlacementRules.createMoveLayout(factory.layout, sourceSlotIndex, destinationSlotIndex, factory.capacity)
+	if not candidate then
+		return buildResponse(factory, false, candidateError)
 	end
-	if not destinationValid then
-		return buildResponse(factory, false, destinationError)
-	end
-	local machineId = factory.layout[sourceSlotIndex]
-	if not machineId then
-		return buildResponse(factory, false, "Source slot is empty")
-	end
-	if factory.layout[destinationSlotIndex] then
-		return buildResponse(factory, false, "Destination slot is occupied")
-	end
-	local machineValid, machineError = PlacementRules.validateMachineForSlot(machineId, destinationSlotIndex)
-	if not machineValid then
-		return buildResponse(factory, false, machineError)
-	end
-
-	factory.layout[sourceSlotIndex] = nil
-	factory.layout[destinationSlotIndex] = machineId
-	local committed, commitError = commitLayout(factory, factory.layout)
+	local committed, commitError = commitLayout(factory, candidate)
 	if not committed then
-		factory.layout[destinationSlotIndex] = nil
-		factory.layout[sourceSlotIndex] = machineId
 		return buildResponse(factory, false, commitError)
 	end
 	AnalyticsService.record(player, "MachineMoved")
@@ -367,14 +560,16 @@ local function createFactory(player: Player)
 		player:SetAttribute("FactoryDataReady", false)
 	end
 	local simulation = FactorySimulation.new({ Route = FactoryLayout.toRoute(FactoryLayout.Default) })
-	local plot, origin = createPlaceholderPlot(player)
+	local plot, origin, conveyor = createPlaceholderPlot(player)
 	local factory = {
 		simulation = simulation,
 		plot = plot,
+		conveyor = conveyor,
 		origin = origin,
 		layout = FactoryLayout.copy(FactoryLayout.Default),
 		capacity = 1,
 		inventory = {},
+		boosterInventory = {},
 		visualItems = {},
 		announcedSpawn = false,
 		announcedSale = false,
@@ -382,7 +577,6 @@ local function createFactory(player: Player)
 	factories[player] = factory
 	refreshMachineVisuals(factory)
 	updateDebugAttributes(player, factory)
-	AnalyticsService.record(player, "FactoryActive")
 end
 
 local function removeFactory(player: Player)
@@ -442,6 +636,7 @@ function FactoryService.getClientState(player: Player): { [string]: any }
 		Success = true,
 		Layout = layoutForClient(factory.layout),
 		Inventory = copyInventory(factory.inventory),
+		BoosterInventory = copyInventory(factory.boosterInventory),
 		Capacity = factory.capacity,
 		SlotCount = FactoryLayout.SlotCount,
 	}
@@ -466,9 +661,10 @@ function FactoryService.getPersistentState(player: Player): { [string]: any }?
 		return nil
 	end
 	return {
-		Coins = factory.simulation:getSnapshot().Coins,
+		Coins = factory.simulation:getCoins(),
 		Layout = FactoryLayout.copy(factory.layout),
 		Inventory = copyInventory(factory.inventory),
+		BoosterInventory = copyInventory(factory.boosterInventory),
 		Capacity = factory.capacity,
 		Statistics = (function()
 			local snapshot = factory.simulation:getSnapshot()
@@ -501,6 +697,7 @@ function FactoryService.applyPersistentState(player: Player, data: { [string]: a
 	factory.capacity = data.Capacity
 	factory.layout = FactoryLayout.copy(data.Layout)
 	factory.inventory = copyInventory(data.Inventory)
+	factory.boosterInventory = copyInventory(data.BoosterInventory)
 	factory.simulation:setCoins(data.Coins)
 	refreshMachineVisuals(factory)
 	updateDebugAttributes(player, factory)
@@ -525,29 +722,26 @@ function FactoryService.start()
 
 	RunService.Heartbeat:Connect(function(deltaTime)
 		attributeUpdateAccumulator += deltaTime
+		visualUpdateAccumulator += deltaTime
+		local shouldUpdateVisuals = visualUpdateAccumulator >= VISUAL_UPDATE_INTERVAL_SECONDS
+		if shouldUpdateVisuals then visualUpdateAccumulator %= VISUAL_UPDATE_INTERVAL_SECONDS end
 		for player, factory in pairs(factories) do
-			if not dataIsReady(player) then
-				continue
-			end
-			local before = factory.simulation:getSnapshot()
-			factory.simulation:step(deltaTime)
-			local after = factory.simulation:getSnapshot()
-			if not factory.announcedSpawn and after.ProducedItems > before.ProducedItems then
+			if not dataIsReady(player) then continue end
+			local produced = factory.simulation:step(deltaTime)
+			local sold = if shouldUpdateVisuals then updateVisualItems(player, factory) else false
+			if not factory.announcedSpawn and produced then
 				factory.announcedSpawn = true
+				AnalyticsService.record(player, "FirstItemProduced")
 				EffectService.fire(player, "FirstItemSpawned")
 			end
-			if not factory.announcedSale and after.SoldItems > before.SoldItems then
+			if not factory.announcedSale and sold then
 				factory.announcedSale = true
-				EffectService.fire(player, "FirstItemSold", { Coins = after.Coins })
+				AnalyticsService.record(player, "FirstItemSold")
+				EffectService.fire(player, "FirstItemSold", { Coins = factory.simulation:getCoins() })
 			end
-			updateVisualItems(factory)
-			if attributeUpdateAccumulator >= 0.25 then
-				updateDebugAttributes(player, factory)
-			end
+			if attributeUpdateAccumulator >= 0.25 then updateDebugAttributes(player, factory) end
 		end
-		if attributeUpdateAccumulator >= 0.25 then
-			attributeUpdateAccumulator = 0
-		end
+		if attributeUpdateAccumulator >= 0.25 then attributeUpdateAccumulator = 0 end
 	end)
 end
 

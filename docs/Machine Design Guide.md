@@ -175,9 +175,7 @@ they likely deserve distinct behaviors because they create different strategies.
 
 ## 13. v1.00 Machine Cap
 
-Target approximately 12 machines.
-
-Adding machine #13 should require a stronger justification than machine #5 because every machine increases:
+The user-approved MVP target is 5–15 droppers and 5–15 sellers in each rarity; the implemented target is eight of each. Existing upgraders remain. Reuse behavior and visual families; do not mistake parameter variants for new systems. Every machine increases:
 
 - balance combinations
 - UI load

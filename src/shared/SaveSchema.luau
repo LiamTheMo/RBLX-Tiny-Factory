@@ -11,15 +11,17 @@ local FactoryConfig = requireSibling("FactoryConfig")
 local FactoryLayout = requireSibling("FactoryLayout")
 local MachineDefinitions = requireSibling("MachineDefinitions")
 local PlacementRules = requireSibling("PlacementRules")
+local BoosterRules = requireSibling("BoosterRules")
 
 local SaveSchema = {}
-SaveSchema.CurrentVersion = 1
+SaveSchema.CurrentVersion = 4
 
 local function defaultData(): { [string]: any }
 	return {
 		SchemaVersion = SaveSchema.CurrentVersion,
 		Coins = 0,
 		Inventory = {},
+		BoosterInventory = {},
 		Layout = FactoryLayout.copy(FactoryLayout.Default),
 		Capacity = 1,
 		RollCount = 0,
@@ -45,7 +47,85 @@ function SaveSchema.migrate(raw: any): { [string]: any }
 		migrated[key] = value
 	end
 	if version == 0 then
-		migrated.SchemaVersion = SaveSchema.CurrentVersion
+		version = 1
+		migrated.SchemaVersion = version
+	end
+	if version == 1 then
+		local legacyLayout = migrated.Layout
+		if type(legacyLayout) == "table" and legacyLayout[5] == "Seller" then
+			local compactLayout = table.clone(legacyLayout)
+			local overflowMachineId = compactLayout[4]
+			if type(overflowMachineId) == "string" then
+				local definition = MachineDefinitions.get(overflowMachineId)
+				if definition and definition.Rollable then
+					local inventory = if type(migrated.Inventory) == "table" then table.clone(migrated.Inventory) else {}
+					local existing = inventory[overflowMachineId]
+					inventory[overflowMachineId] = (if type(existing) == "number" and existing % 1 == 0 and existing > 0 then existing else 0) + 1
+					migrated.Inventory = inventory
+				end
+			end
+			compactLayout[4] = "Seller"
+			compactLayout[5] = nil
+			migrated.Layout = compactLayout
+		end
+		if type(migrated.Capacity) == "number" then
+			migrated.Capacity = math.min(migrated.Capacity, FactoryConfig.MaxFactoryCapacity)
+		end
+		migrated.SchemaVersion = 2
+		version = 2
+	end
+	if version == 2 then
+		local legacyLayout = migrated.Layout
+		if type(legacyLayout) == "table" then
+			local sellerSlot: number? = nil
+			for slotIndex = 1, FactoryLayout.SlotCount do
+				local definition = MachineDefinitions.get(legacyLayout[slotIndex])
+				if definition and definition.Category == "Seller" then
+					sellerSlot = slotIndex
+					break
+				end
+			end
+			if sellerSlot and sellerSlot ~= FactoryLayout.SellerSlotIndex then
+				local updatedLayout = table.clone(legacyLayout)
+				local displaced = updatedLayout[FactoryLayout.SellerSlotIndex]
+				local displacedDefinition = MachineDefinitions.get(displaced)
+				if displacedDefinition and displacedDefinition.Rollable then
+					local inventory = if type(migrated.Inventory) == "table" then table.clone(migrated.Inventory) else {}
+					local existing = inventory[displaced]
+					inventory[displaced] = (if type(existing) == "number" and existing % 1 == 0 and existing > 0 then existing else 0) + 1
+					migrated.Inventory = inventory
+				end
+				updatedLayout[sellerSlot] = nil
+				updatedLayout[FactoryLayout.SellerSlotIndex] = legacyLayout[sellerSlot]
+				migrated.Layout = updatedLayout
+			end
+		end
+		migrated.BoosterInventory = migrated.BoosterInventory or {}
+		migrated.SchemaVersion = 3
+		version = 3
+	end
+	if version == 3 then
+		local legacyLayout = migrated.Layout
+		if type(legacyLayout) == "table" then
+			local legacySellerSlot: number? = nil
+			for slotIndex = 1, FactoryLayout.SellerSlotIndex - 1 do
+				local definition = MachineDefinitions.get(legacyLayout[slotIndex])
+				if definition and definition.Category == "Seller" then
+					legacySellerSlot = slotIndex
+					break
+				end
+			end
+			if legacySellerSlot then
+				local updatedLayout = table.clone(legacyLayout)
+				updatedLayout[FactoryLayout.SellerSlotIndex] = legacyLayout[legacySellerSlot]
+				updatedLayout[legacySellerSlot] = nil
+				migrated.Layout = updatedLayout
+			end
+		end
+		if type(migrated.Capacity) == "number" then
+			migrated.Capacity = math.clamp(migrated.Capacity, 1, FactoryConfig.MaxFactoryCapacity)
+		end
+		migrated.SchemaVersion = 4
 	end
 	return migrated
 end
@@ -55,7 +135,7 @@ function SaveSchema.sanitize(raw: any): { [string]: any }
 	local safe = defaultData()
 
 	if type(source.Coins) == "number" and source.Coins == source.Coins and source.Coins >= 0 then
-		safe.Coins = math.min(math.floor(source.Coins), FactoryConfig.MaxItemValue)
+		safe.Coins = math.min(math.floor(source.Coins * 100 + 0.5) / 100, FactoryConfig.MaxCoins)
 	end
 	if type(source.Capacity) == "number" and source.Capacity % 1 == 0 then
 		safe.Capacity = math.clamp(source.Capacity, 1, FactoryConfig.MaxFactoryCapacity)
@@ -72,6 +152,8 @@ function SaveSchema.sanitize(raw: any): { [string]: any }
 			end
 		end
 	end
+
+	safe.BoosterInventory = BoosterRules.sanitizeInventory(source.BoosterInventory)
 
 	if type(source.Layout) == "table" then
 		local candidate = {}
@@ -91,7 +173,7 @@ function SaveSchema.sanitize(raw: any): { [string]: any }
 		end
 		for statistic, value in pairs(sourceCounters) do
 			if type(statistic) == "string" and statistic:match("^[%a_][%w_]*$") and #statistic <= 48 and type(value) == "number" and value >= 0 and value % 1 == 0 then
-				destination[statistic] = math.min(value, 1_000_000)
+				destination[statistic] = math.min(value, if statistic == "TotalValueSold" then FactoryConfig.MaxCoins else 1_000_000)
 			end
 		end
 	end

@@ -4,8 +4,8 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
-local Shared = ReplicatedStorage:WaitForChild("Shared")
-local MachineDefinitions = require(Shared:WaitForChild("MachineDefinitions"))
+local NumberFormatter = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("NumberFormatter"))
+
 local EffectsController = require(script.Parent.EffectsController)
 
 local EconomyController = {}
@@ -14,7 +14,6 @@ local started = false
 local COLORS = {
 	Panel = Color3.fromRGB(28, 24, 21),
 	Button = Color3.fromRGB(46, 39, 34),
-	Selected = Color3.fromRGB(112, 77, 34),
 	Good = Color3.fromRGB(140, 235, 150),
 	Bad = Color3.fromRGB(255, 150, 120),
 	Text = Color3.fromRGB(255, 255, 255),
@@ -35,14 +34,6 @@ local function createButton(parent: Instance, name: string, text: string): TextB
 	return button
 end
 
-local function clearDynamicChildren(parent: Instance)
-	for _, child in ipairs(parent:GetChildren()) do
-		if not child:IsA("UIListLayout") then
-			child:Destroy()
-		end
-	end
-end
-
 function EconomyController.start()
 	if started then
 		return
@@ -54,7 +45,6 @@ function EconomyController.start()
 	local remotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Factory")
 	local getState = remotes:WaitForChild("GetEconomyState") :: RemoteFunction
 	local rollMachine = remotes:WaitForChild("RollMachine") :: RemoteFunction
-	local sellMachine = remotes:WaitForChild("SellMachine") :: RemoteFunction
 	local buyCapacity = remotes:WaitForChild("BuyCapacity") :: RemoteFunction
 	local presentationEvent = remotes:WaitForChild("PresentationEvent") :: RemoteEvent
 
@@ -80,6 +70,7 @@ function EconomyController.start()
 	title.Parent = panel
 
 	local status = Instance.new("TextLabel")
+	status.Name = "EconomyStatus"
 	status.BackgroundTransparency = 1
 	status.TextColor3 = COLORS.Text
 	status.TextWrapped = true
@@ -87,25 +78,23 @@ function EconomyController.start()
 	status.TextSize = 12
 	status.Parent = panel
 
-	local result = Instance.new("TextLabel")
-	result.BackgroundTransparency = 1
-	result.TextColor3 = COLORS.Accent
-	result.TextWrapped = true
-	result.Font = Enum.Font.GothamBold
-	result.TextSize = 13
-	result.Parent = panel
+	local luckStatus = Instance.new("TextLabel")
+	luckStatus.Name = "LuckStatus"
+	luckStatus.BackgroundTransparency = 1
+	luckStatus.TextColor3 = Color3.fromRGB(207, 176, 240)
+	luckStatus.Font = Enum.Font.GothamBold
+	luckStatus.TextSize = 11
+	luckStatus.TextXAlignment = Enum.TextXAlignment.Left
+	luckStatus.Parent = panel
 
 	local rollDock = Instance.new("Frame")
 	rollDock.Name = "RollDock"
 	rollDock.AnchorPoint = Vector2.new(0.5, 1)
 	rollDock.Position = UDim2.new(0.5, 0, 1, -14)
-	rollDock.BackgroundColor3 = COLORS.Panel
+	rollDock.BackgroundTransparency = 1
 	rollDock.BorderSizePixel = 0
 	rollDock.Parent = screenGui
-	local dockCorner = Instance.new("UICorner")
-	dockCorner.CornerRadius = UDim.new(0, 16)
-	dockCorner.Parent = rollDock
-	local roll = createButton(rollDock, "Roll", "ROLL FREE")
+	local roll = createButton(rollDock, "Roll", "Roll")
 	roll.Font = Enum.Font.GothamBlack
 	roll.TextSize = 20
 	roll.BackgroundColor3 = COLORS.Accent
@@ -115,39 +104,33 @@ function EconomyController.start()
 	rollCorner.Parent = roll
 	local capacity = createButton(panel, "Capacity", "Buy capacity")
 
-	local inventoryTitle = Instance.new("TextLabel")
-	inventoryTitle.BackgroundTransparency = 1
-	inventoryTitle.Text = "Inventory — tap an item to recycle one"
-	inventoryTitle.TextColor3 = COLORS.Text
-	inventoryTitle.Font = Enum.Font.GothamBold
-	inventoryTitle.TextSize = 11
-	inventoryTitle.TextXAlignment = Enum.TextXAlignment.Left
-	inventoryTitle.Parent = panel
-
-	local inventoryList = Instance.new("ScrollingFrame")
-	inventoryList.Name = "InventoryList"
-	inventoryList.BackgroundTransparency = 1
-	inventoryList.BorderSizePixel = 0
-	inventoryList.ScrollBarThickness = 5
-	inventoryList.CanvasSize = UDim2.fromScale(0, 0)
-	inventoryList.Parent = panel
-	local inventoryLayout = Instance.new("UIListLayout")
-	inventoryLayout.Padding = UDim.new(0, 3)
-	inventoryLayout.Parent = inventoryList
 
 	local state: any = nil
 	local compact = false
 	local cooldownEndAt = 0
 	local rolling = false
 
+	local function updateLuckStatus()
+		local multiplier = if state then state.LuckMultiplier or 1 else 1
+		local expiresAt = if state then state.LuckExpiresAt or 0 else 0
+		local remaining = math.max(0, expiresAt - workspace:GetServerTimeNow())
+		luckStatus.Visible = multiplier > 1 and remaining > 0
+		luckStatus.Text = if luckStatus.Visible then string.format("Luck x%.2f · %ds", multiplier, math.ceil(remaining)) else ""
+	end
+
 	local function updateRollButton()
 		local remaining = math.max(0, cooldownEndAt - os.clock())
 		local ready = state ~= nil and state.DataReady == true
-		roll.Text = if rolling then "ROLLING..." elseif not ready then "FACTORY LOADING" elseif remaining > 0 then string.format("READY IN %.1fs", remaining) else "ROLL FREE"
+		roll.Text = if rolling then "ROLLING..." elseif not ready then "FACTORY LOADING" elseif remaining > 0 then string.format("READY IN %.2fs", remaining) else "Roll"
+		roll.TextSize = if rolling then 16 else 20
+		roll.TextWrapped = false
 		roll.Active = ready and not rolling and remaining <= 0
 		roll.AutoButtonColor = roll.Active
+		roll.BackgroundTransparency = if rolling then 1 else 0
 		roll.BackgroundColor3 = if roll.Active then COLORS.Accent else COLORS.Button
 		roll.TextColor3 = if roll.Active then COLORS.Panel else COLORS.Text
+		roll.TextStrokeColor3 = Color3.fromRGB(20, 24, 32)
+		roll.TextStrokeTransparency = if rolling then 0.2 else 1
 	end
 
 	local function syncCooldown(response: any)
@@ -180,6 +163,8 @@ function EconomyController.start()
 		syncCooldown(response)
 		if response and response.Success then
 			state = response
+			local ready = player:GetAttribute("FactoryDataReady")
+			if type(ready) == "boolean" then state.DataReady = ready end
 			render()
 			updateRollButton()
 		else
@@ -191,38 +176,9 @@ function EconomyController.start()
 		if not state then
 			return
 		end
-		status.Text = if state.DataReady then `Coins {state.Coins}  |  Slots {state.Capacity}/{state.MaxCapacity}  |  Machines {state.InventoryCount or 0}/{state.MaxInventoryMachines or 200}` else (state.DataError or "Factory data is loading")
-		capacity.Text = if state.CapacityCost then `Buy capacity · {state.CapacityCost} Coins` else "Capacity MAX"
-		clearDynamicChildren(inventoryList)
-		local count = 0
-		for machineId, quantity in pairs(state.Inventory or {}) do
-			if quantity > 0 then
-				count += 1
-				local definition = MachineDefinitions.get(machineId)
-				local button = createButton(inventoryList, `Sell_{machineId}`, `Recycle {definition and definition.DisplayName or machineId} ×{quantity}`)
-				button.Size = UDim2.new(1, -6, 0, if compact then 28 else 32)
-				button.TextXAlignment = Enum.TextXAlignment.Left
-				button.Activated:Connect(function()
-					local response = invoke(sellMachine, machineId, 1)
-					if response and response.Success then
-						setStatus(`Recycled one {definition and definition.DisplayName or machineId}.`, true)
-						refresh(response)
-					end
-				end)
-			end
-		end
-		if count == 0 then
-			local empty = Instance.new("TextLabel")
-			empty.BackgroundTransparency = 1
-			empty.Text = "Inventory is empty. Roll a machine to get another choice."
-			empty.TextColor3 = Color3.fromRGB(190, 180, 170)
-			empty.Font = Enum.Font.Gotham
-			empty.TextSize = 11
-			empty.TextWrapped = true
-			empty.Size = UDim2.new(1, -6, 0, 28)
-			empty.Parent = inventoryList
-		end
-		inventoryList.CanvasSize = UDim2.fromOffset(0, inventoryLayout.AbsoluteContentSize.Y)
+		status.Text = if state.DataReady then `Coins {NumberFormatter.format(state.Coins)}  |  Slots {state.Capacity}/{state.MaxCapacity}  |  Machines {state.InventoryCount or 0}/{state.MaxInventoryMachines or 200}` else (state.DataError or "Factory data is loading")
+		updateLuckStatus()
+		capacity.Text = if state.CapacityCost then `Buy capacity · {NumberFormatter.format(state.CapacityCost)} Coins` else "Capacity MAX"
 	end
 
 	roll.Activated:Connect(function()
@@ -234,11 +190,9 @@ function EconomyController.start()
 		EffectsController.play("RollPending")
 		local response = invoke(rollMachine)
 		if response and response.Success then
-			local definition = response.LastRoll and MachineDefinitions.get(response.LastRoll)
-			result.Text = `Rolled: {definition and definition.DisplayName or response.LastRoll or "Machine"} ({response.LastRarity or "Unknown"})`
-			setStatus("Machine added to inventory.", true)
+			local luckMultiplier = response.LastRollLuckMultiplier or 1
 			refresh(response)
-			EffectsController.play("MachineRolled", { MachineId = response.LastRoll, Rarity = response.LastRarity })
+			EffectsController.play("MachineRolled", { MachineId = response.LastRoll, Rarity = response.LastRarity, LuckMultiplier = luckMultiplier })
 		else
 			syncCooldown(response)
 			setStatus(response and response.Reason or "Roll unavailable", false)
@@ -267,23 +221,19 @@ function EconomyController.start()
 			panelWidth = math.floor(math.clamp(viewportWidth * widthRatio, 232, 272))
 			panelWidth = math.min(panelWidth, math.max(184, viewportWidth - 16))
 		end
-		panel.Size = if compact then UDim2.fromOffset(panelWidth, 204) else UDim2.fromOffset(panelWidth, 350)
-		panel.Position = if compactLandscape then UDim2.fromOffset(8, 8) elseif compact then UDim2.fromOffset(8, 8) else UDim2.new(1, -316, 0, 16)
+		panel.Size = if compact then UDim2.fromOffset(panelWidth, 134) else UDim2.fromOffset(panelWidth, 148)
+		panel.Position = if compactLandscape or compact then UDim2.new(1, -panelWidth - 8, 0, 8) else UDim2.new(1, -316, 0, 16)
 		title.Position = UDim2.fromOffset(8, 8)
 		title.Size = UDim2.new(1, -16, 0, if compact then 24 else 26)
 		status.Position = UDim2.fromOffset(8, if compact then 34 else 36)
-		status.Size = UDim2.new(1, -16, 0, if compact then 34 else 24)
-		result.Position = UDim2.fromOffset(8, if compact then 70 else 62)
-		result.Size = UDim2.new(1, -16, 0, if compact then 20 else 24)
-		capacity.Position = UDim2.fromOffset(8, if compact then 94 else 130)
-		capacity.Size = UDim2.fromOffset(panelWidth - 16, if compact then 38 else 34)
+		status.Size = UDim2.new(1, -16, 0, if compact then 30 else 24)
+		luckStatus.Position = UDim2.fromOffset(8, if compact then 64 else 62)
+		luckStatus.Size = UDim2.new(1, -16, 0, 16)
+		capacity.Position = UDim2.fromOffset(8, if compact then 92 else 96)
+		capacity.Size = UDim2.fromOffset(panelWidth - 16, if compact then 36 else 34)
 		rollDock.Size = UDim2.fromOffset(if compact then math.min(268, viewportWidth - 24) else 320, 72)
 		roll.Position = UDim2.fromOffset(8, 8)
 		roll.Size = UDim2.new(1, -16, 1, -16)
-		inventoryTitle.Position = UDim2.fromOffset(8, if compact then 138 else 174)
-		inventoryTitle.Size = UDim2.new(1, -16, 0, 18)
-		inventoryList.Position = UDim2.fromOffset(8, if compact then 158 else 196)
-		inventoryList.Size = UDim2.new(1, -16, 0, if compact then 38 else 142)
 		render()
 	end
 
@@ -297,16 +247,34 @@ function EconomyController.start()
 		layout(1000, 800)
 	end
 	setStatus("Roll for free; production funds capacity upgrades.", nil)
-	refresh(nil)
-	presentationEvent.OnClientEvent:Connect(function(eventName: string)
-		if eventName == "InventoryChanged" then
+	player:GetAttributeChangedSignal("FactoryCoins"):Connect(function()
+		local balance = player:GetAttribute("FactoryCoins")
+		if state and type(balance) == "number" then state.Coins = balance; render() end
+	end)
+	for _, attribute in ipairs({ "FactoryDataReady", "FactoryDataError" }) do
+		player:GetAttributeChangedSignal(attribute):Connect(function()
+			if state then
+				state.DataReady = player:GetAttribute("FactoryDataReady") == true
+				state.DataError = player:GetAttribute("FactoryDataError")
+				render()
+				updateRollButton()
+			end
+		end)
+	end
+	presentationEvent.OnClientEvent:Connect(function(eventName: string, payload: any)
+		if eventName == "ItemSold" and state and type(payload.Balance) == "number" then
+			state.Coins = payload.Balance
+			render()
+		elseif eventName == "InventoryChanged" then
 			refresh(nil)
 		end
 	end)
+	refresh(nil)
 	task.spawn(function()
 		while screenGui.Parent do
 			updateRollButton()
-			task.wait(0.1)
+			updateLuckStatus()
+			task.wait(0.25)
 		end
 	end)
 end

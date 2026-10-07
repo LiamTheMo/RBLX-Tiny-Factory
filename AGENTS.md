@@ -2,12 +2,13 @@
 
 ## Project status
 
-Tiny Factory is a Roblox incremental/factory game. `main` contains the
-integrated release, and `v0.01` through `v0.06` are permanent cumulative phase
-checkpoints. The local implementation contains the complete Phase 1–6 v1
-candidate. Automated validation is complete. Roblox Studio manual validation
-and remote GitHub synchronization are release handoff steps when credentials
-and a testable Roblox target are available.
+Tiny Factory is a Roblox incremental/factory game. `main` is the deployed
+integration branch; version branches are permanent checkpoints. The active
+implementation is the unfinished `v1.00` polished MVP, with a nested weighted machine roll pool, themed
+cube types, alternate sellers, and per-player DataStore persistence. Each
+player's durable state is autosaved every 60 seconds and saved again on leave
+and server shutdown. Roblox Studio validation on the published place is still
+required for runtime, multiplayer, mobile, and reconnect behavior.
 
 ### Cumulative phase checkpoints
 
@@ -31,10 +32,10 @@ The factory is the product. Do not let generic simulator conventions, extra
 currencies, passive number growth, or social features replace the visible
 produce → transform → sell → roll → rebuild loop.
 
-The current local v1 implementation includes deterministic bounded simulation,
-server-authoritative placement and economy, a twelve-machine launch set,
-responsive build/economy HUDs, schema-versioned persistence with session locks,
-bounded analytics, and a Tiny Factory-only validation/deployment workflow.
+The historical v1 implementation established deterministic bounded simulation,
+server-authoritative placement and economy, responsive build/economy HUDs,
+schema-versioned persistence with session locks, bounded analytics, and the
+Tiny Factory validation/deployment workflow. The MVP catalog has eight droppers and eight sellers in each supported rarity, plus existing upgraders. Read `docs/v1.00/MVP-Audit.md` and `MVP-Completion-Plan.md` for current scope; v2.00 graph expansion is gated on MVP acceptance.
 
 ## Required Git workflow
 
@@ -42,20 +43,33 @@ The major branches are permanent checkpoints. Only `main` and branches named
 `vX.XX` are major branches.
 
 1. Audit the repository, branch, requirements, and existing validation state.
-2. Start from the intended major branch. For current v1 work, use `v1.00`;
-   earlier version branches remain historical checkpoints.
+2. Start from the intended major branch. For current work, use the latest
+   version branch unless the task explicitly targets an earlier checkpoint.
 3. Create a descriptive temporary/minor branch for every change. Never develop
    directly on `main` or a `vX.XX` branch.
 4. Implement one coherent change set on the temporary branch.
-5. Validate with the relevant tests, compilers, build checks, security checks,
-   and manual checklist.
-6. Review the diff and any CI/review findings, fix actionable issues, and
+5. Run the relevant tests, compilers, build checks, security checks, and
+   manual checklist locally on the temporary branch.
+6. Review the diff and local validation results, fix actionable issues, and
    revalidate.
 7. Commit and push the temporary branch, open a pull request into its origin
-   major branch, and merge it only after validation.
-8. Push the updated major branch.
+   major branch, and merge it only after local validation and diff review.
+8. The merge push to the major branch triggers its GitHub Actions validation.
+   Resolve any failure before integrating that major version into `main`.
 9. Merge the completed major branch into `main` only when the release/version is
-   intended for integration or deployment.
+   intended for integration or deployment. The `main` push validates and
+   publishes under the deployment policy.
+
+
+### GitHub Actions branch policy
+
+The Tiny Factory Actions workflow runs validation on pushes to `main` and
+permanent major branches named `vX.XX`. Pull request events and temporary or
+minor branches do not start Actions jobs. Keep the workflow branch filter
+specific to those major branch names; do not add a `pull_request` trigger or
+broaden it to arbitrary refs. Manual dispatch jobs are gated to `main`, where
+the optional publish path is available. Version-branch pushes validate only;
+`main` pushes validate and publish.
 
 Deployment is allowed only from `main` under the repository's deployment policy.
 Do not publish from temporary or version branches. Never delete a completed
@@ -83,8 +97,9 @@ canonical documentation set is:
 - `docs/Scope Classification.md` — Required Now / Valuable Later / Scope Creep.
 - `docs/Future Directions.md` — explicitly conditional post-v4 ideas.
 - `docs/v1.00/` — the complete v1 phase plan and exit criteria.
-- `docs/v2.00/`, `docs/v3.00/`, and `docs/v4.00/` — future constraints that
-  should inform compatibility without pulling future scope into v1.
+- `docs/v1.00/MVP-Completion-Plan.md` is the active completion plan. `docs/v2.00/` is planned expansion only. `docs/v3.00/` and `docs/v4.00/`
+  describe future constraints; keep that scope out of the active version unless
+  explicitly requested.
 
 All of the above documentation was read during creation of this file. The
 documentation is intentionally validation-first: a roadmap item is not proof
@@ -119,7 +134,7 @@ services, tests, or deployment assumptions when implementing Tiny Factory.
 - Coins as the only v1 currency;
 - machine placement, movement, removal, inventory, free rolling, recycling, and a few
   capacity upgrades;
-- approximately twelve machines only if they create distinct decisions;
+- eight rollable droppers and eight sellers per supported rarity, plus existing upgraders;
 - schema-versioned persistence and basic analytics;
 - explicit remote validation and rate limits;
 - readable desktop and mobile building controls;
@@ -201,6 +216,15 @@ Use reusable behaviors for common numeric/value/visual/throughput mechanics.
 Keep bespoke logic isolated. Rarity is not a universal power ladder; Common
 machines must remain strategically useful.
 
+## Modular content rule
+
+Keep machine definitions, their individual roll weights, rarity bands, and rarity
+presentation colors in shared data modules. Services, controllers, and tests
+should derive behavior from those definitions instead of keeping copied machine
+lists, threshold chains, or color maps. Adding a machine or rarity should
+normally require a new definition/config entry plus focused validation, not a
+rewrite of the roll algorithm or reveal UI.
+
 ## Economy and security rules
 
 Rolls are free with a server-owned cooldown; Coins fund limited capacity upgrades.
@@ -274,9 +298,7 @@ branch may publish directly.
 
 ## Definition of done for v1.00
 
-The Phase 1–6 implementation is complete when all phase tests, compilation,
-Rojo build, release checks, and code review pass. A public `v1.00` release still
-requires the following Roblox Studio acceptance checks on the published place:
+Phase 1–6 checks establish the foundation. The modeled/polished MVP also requires Phases 7–10 and owner visual/playability acceptance before v2.00. A public `v1.00` release requires the following Roblox Studio acceptance checks on the published place:
 
 - [ ] New-player no-explanation first-minute test.
 - [ ] Desktop full loop: roll, place, produce, sell, and expand.

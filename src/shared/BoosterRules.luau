@@ -1,0 +1,142 @@
+--!strict
+
+local BoosterConfig
+local EconomyConfig
+if script ~= nil then
+	BoosterConfig = require(script.Parent.BoosterConfig)
+	EconomyConfig = require(script.Parent.EconomyConfig)
+else
+	BoosterConfig = require("./BoosterConfig")
+	EconomyConfig = require("./EconomyConfig")
+end
+
+local BoosterRules = {}
+
+function BoosterRules.get(boosterId: any): any?
+	if type(boosterId) ~= "string" then
+		return nil
+	end
+	for _, definition in ipairs(BoosterConfig.Definitions) do
+		if definition.Id == boosterId then
+			return definition
+		end
+	end
+	return nil
+end
+
+function BoosterRules.getTotalSpawnWeight(): number
+	local totalWeight = 0
+	for _, definition in ipairs(BoosterConfig.Definitions) do
+		if type(definition.SpawnWeight) == "number" and definition.SpawnWeight > 0 then
+			totalWeight += definition.SpawnWeight
+		end
+	end
+	return totalWeight
+end
+
+function BoosterRules.pickBoosterId(roll: any): string?
+	local totalWeight = BoosterRules.getTotalSpawnWeight()
+	if type(roll) ~= "number" or roll < 0 or roll >= totalWeight then
+		return nil
+	end
+	local cursor = 0
+	for _, definition in ipairs(BoosterConfig.Definitions) do
+		if type(definition.SpawnWeight) == "number" and definition.SpawnWeight > 0 then
+			cursor += definition.SpawnWeight
+			if roll < cursor then
+				return definition.Id
+			end
+		end
+	end
+	return nil
+end
+
+function BoosterRules.sanitizeInventory(raw: any): { [string]: number }
+	local result: { [string]: number } = {}
+	if type(raw) ~= "table" then return result end
+	for boosterId, quantity in pairs(raw) do
+		if BoosterRules.get(boosterId) and type(quantity) == "number" and quantity == quantity
+			and quantity % 1 == 0 and quantity > 0 then
+			result[boosterId] = math.min(quantity, BoosterConfig.MaxStoredPerType)
+		end
+	end
+	return result
+end
+
+function BoosterRules.validate(): (boolean, string?)
+	if type(BoosterConfig.SpawnIntervalSeconds) ~= "number" or BoosterConfig.SpawnIntervalSeconds <= 0
+		or type(BoosterConfig.MaxActiveDropsPerFactory) ~= "number" or BoosterConfig.MaxActiveDropsPerFactory < 1
+		or type(BoosterConfig.MaxActiveDropsWorldwide) ~= "number" or BoosterConfig.MaxActiveDropsWorldwide < 1
+		or type(BoosterConfig.DespawnAfterSeconds) ~= "number" or BoosterConfig.DespawnAfterSeconds <= 0
+		or type(BoosterConfig.MaxLuckDurationSeconds) ~= "number" or BoosterConfig.MaxLuckDurationSeconds < 1
+		or type(BoosterConfig.MaxSaleValueDurationSeconds) ~= "number" or BoosterConfig.MaxSaleValueDurationSeconds < 1
+		or type(BoosterConfig.MaxStoredPerType) ~= "number" or BoosterConfig.MaxStoredPerType % 1 ~= 0 or BoosterConfig.MaxStoredPerType < 1 then
+		return false, "Booster spawn limits must be positive"
+	end
+	local bounds = BoosterConfig.SpawnBounds
+	if type(bounds) ~= "table"
+		or type(bounds.MinX) ~= "number" or type(bounds.MaxX) ~= "number" or bounds.MinX >= bounds.MaxX
+		or type(bounds.MinZ) ~= "number" or type(bounds.MaxZ) ~= "number" or bounds.MinZ >= bounds.MaxZ then
+		return false, "Booster spawn bounds are invalid"
+	end
+	local raycast = BoosterConfig.LandRaycast
+	if type(raycast) ~= "table"
+		or type(raycast.StartHeight) ~= "number" or raycast.StartHeight <= 0
+		or type(raycast.Distance) ~= "number" or raycast.Distance <= raycast.StartHeight
+		or type(raycast.PositionAttempts) ~= "number" or raycast.PositionAttempts % 1 ~= 0 or raycast.PositionAttempts < 1 or raycast.PositionAttempts > 32
+		or type(raycast.MinimumGroundNormalY) ~= "number" or raycast.MinimumGroundNormalY < 0 or raycast.MinimumGroundNormalY > 1 then
+		return false, "Booster land raycast settings are invalid"
+	end
+	local fall = BoosterConfig.Fall
+	if type(fall) ~= "table"
+		or type(fall.DropHeight) ~= "number" or fall.DropHeight <= 0
+		or type(fall.DurationSeconds) ~= "number" or fall.DurationSeconds <= 0 or fall.DurationSeconds > 10
+		or type(fall.StartingSize) ~= "number" or fall.StartingSize <= 0
+		or type(fall.LandedSize) ~= "number" or fall.LandedSize < fall.StartingSize or fall.LandedSize > 10
+		or type(fall.LandingHeight) ~= "number" or fall.LandingHeight < fall.LandedSize / 2 then
+		return false, "Booster fall settings are invalid"
+	end
+	local seenIds: { [string]: boolean } = {}
+	for _, definition in ipairs(BoosterConfig.Definitions) do
+		if type(definition.Id) ~= "string" or definition.Id == "" or seenIds[definition.Id] then
+			return false, "Booster IDs must be non-empty and unique"
+		end
+		seenIds[definition.Id] = true
+		if type(definition.DisplayName) ~= "string" or definition.DisplayName == "" or type(definition.SpawnWeight) ~= "number" or definition.SpawnWeight <= 0 then
+			return false, "Boosters need a name and positive spawn weight"
+		end
+		local color = definition.Color
+		if type(color) ~= "table" or #color ~= 3 then
+			return false, "Booster colors must be RGB triples"
+		end
+		for _, channel in ipairs(color) do
+			if type(channel) ~= "number" or channel % 1 ~= 0 or channel < 0 or channel > 255 then
+				return false, "Booster RGB channels must be integers from 0 to 255"
+			end
+		end
+		local effect = definition.Effect
+		if type(effect) ~= "table" then
+			return false, "Each booster needs an effect"
+		elseif effect.Kind == "SaleValue" then
+			local additiveBonus = effect.AdditiveBonus or 0
+			if type(additiveBonus) ~= "number" or additiveBonus ~= additiveBonus or additiveBonus < 0 or additiveBonus == math.huge
+				or type(effect.Multiplier) ~= "number" or effect.Multiplier ~= effect.Multiplier or effect.Multiplier < 1 or effect.Multiplier > EconomyConfig.MaxSaleValueMultiplier
+				or type(effect.DurationSeconds) ~= "number" or effect.DurationSeconds ~= effect.DurationSeconds or effect.DurationSeconds < 1 or effect.DurationSeconds > BoosterConfig.MaxSaleValueDurationSeconds then
+				return false, "Sale-value booster strength or duration is outside configured limits"
+			end
+		elseif effect.Kind == "Luck" then
+			if type(effect.Multiplier) ~= "number" or effect.Multiplier < 1 or effect.Multiplier > EconomyConfig.MaxLuckMultiplier
+				or type(effect.DurationSeconds) ~= "number" or effect.DurationSeconds < 1 or effect.DurationSeconds > BoosterConfig.MaxLuckDurationSeconds then
+				return false, "Luck booster strength or duration is outside configured limits"
+			end
+		else
+			return false, "Booster effect kind is not supported"
+		end
+	end
+	if BoosterRules.getTotalSpawnWeight() <= 0 then
+		return false, "At least one weighted booster is required"
+	end
+	return true
+end
+
+return BoosterRules

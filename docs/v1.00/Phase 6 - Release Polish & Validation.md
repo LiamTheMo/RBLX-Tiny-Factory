@@ -101,4 +101,4 @@ All previous v1 phases.
 - Any feature not required to answer the v1 validation question.
 
 ## Completion Definition
-v1.00 is technically complete when Phases 1–6 pass the automated suite and release checks. Public release still requires the listed Roblox Studio manual launch tests to be run against the published place.
+Phase 1–6 automated checks prove the foundation only. v1.00 remains incomplete until Phases 7–10 in `MVP-Completion-Plan.md` deliver the modeled world, intentional machine art, UI/audio/balance polish, and deployed manual acceptance. Owner approval of visual quality and playability is required before starting v2.00.
