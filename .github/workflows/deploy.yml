@@ -77,10 +77,12 @@ jobs:
           grep -q "LootService" /tmp/TinyFactoryValidation.rbxlx
 
       - name: Validate code-only target mappings
-        run: python3 scripts/roblox_cloud_sync.py --check
+        run: |
+          python3 scripts/roblox_cloud_sync.py --check
+          python3 scripts/roblox_live_publish.py --check
 
   sync:
-    name: Sync existing Tiny Factory scripts from main (no place publishing)
+    name: Publish Tiny Factory scripts from main (preserve Studio assets)
     needs: validate
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -88,9 +90,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Preflight and sync only existing scripts in the selected place
+      - name: Preflight and publish scripts in the existing place in the selected place
         env:
+          ROBLOX_LIVE_PUBLISH_ENABLED: ${{ vars.ROBLOX_LIVE_PUBLISH_ENABLED }}
           ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
           ROBLOX_UNIVERSE_ID: ${{ secrets.ROBLOX_UNIVERSE_ID }}
           ROBLOX_PLACE_ID: ${{ secrets.ROBLOX_PLACE_ID }}
-        run: python3 scripts/roblox_cloud_sync.py --deploy
+        run: python3 scripts/roblox_live_publish.py --deploy
