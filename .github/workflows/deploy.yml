@@ -79,8 +79,8 @@ jobs:
           set -euo pipefail
           rojo build default.project.json --output /tmp/TinyFactoryValidation.rbxlx
           test -s /tmp/TinyFactoryValidation.rbxlx
-          grep -q "PrototypeBaseplate" /tmp/TinyFactoryValidation.rbxlx
-          grep -q "PrototypeSpawn" /tmp/TinyFactoryValidation.rbxlx
+          grep -q "IslandWorldBuilder" /tmp/TinyFactoryValidation.rbxlx
+          grep -q "IslandWorldConfig" /tmp/TinyFactoryValidation.rbxlx
           grep -q "LootService" /tmp/TinyFactoryValidation.rbxlx
 
   publish:

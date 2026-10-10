@@ -18,12 +18,13 @@ local MachineDefinitions = require(Shared:WaitForChild("MachineDefinitions"))
 local PlacementRules = require(Shared:WaitForChild("PlacementRules"))
 local AnalyticsService = require(script.Parent.AnalyticsService)
 local EffectService = require(script.Parent.EffectService)
+local IslandWorldConfig = require(Shared:WaitForChild("IslandWorldConfig"))
 
 local FactoryService = {}
 local factories = {}
 local lastRequestAt = {}
 local started = false
-local nextPlotIndex = 0
+local occupiedPlots = {}
 local attributeUpdateAccumulator = 0
 local visualUpdateAccumulator = 0
 local VISUAL_UPDATE_INTERVAL_SECONDS = 1 / 20
@@ -216,7 +217,7 @@ local function createConveyor(plot: Folder, origin: Vector3): Folder
 	return conveyor
 end
 
-local function createPlaceholderPlot(player: Player): (Folder, Vector3, Folder)
+local function createIslandPlot(player: Player, plotIndex: number): (Folder, Vector3, Folder)
 	local plotsFolder = workspace:FindFirstChild("TinyFactoryPlots")
 	if not plotsFolder then
 		plotsFolder = Instance.new("Folder")
@@ -225,11 +226,12 @@ local function createPlaceholderPlot(player: Player): (Folder, Vector3, Folder)
 	end
 
 	local plotConfig = MachineVisualConfig.FactoryPlot
-	nextPlotIndex += 1
-	local origin = Vector3.new((nextPlotIndex - 1) * plotConfig.SpacingX, 0, 0)
+	local position = IslandWorldConfig.getPlotOrigin(plotIndex)
+	local origin = Vector3.new(position.X, position.Y, position.Z)
 	local plot = Instance.new("Folder")
 	plot.Name = string.format("Factory_%d", player.UserId)
 	plot:SetAttribute("OwnerUserId", player.UserId)
+	plot:SetAttribute("IslandIndex", plotIndex)
 	plot.Parent = plotsFolder
 
 	local slotCount = FactoryLayout.SlotCount
@@ -555,17 +557,24 @@ local function createFactory(player: Player)
 	if factories[player] then
 		return
 	end
+	local plotIndex = IslandWorldConfig.findFreePlot(occupiedPlots)
+	if not plotIndex then
+		player:Kick("All six factory islands are occupied. Please join another server.")
+		return
+	end
+	occupiedPlots[plotIndex] = true
 	player:SetAttribute("FactoryBuildVersion", FactoryConfig.BuildVersion)
 	if player:GetAttribute("FactoryDataReady") == nil then
 		player:SetAttribute("FactoryDataReady", false)
 	end
 	local simulation = FactorySimulation.new({ Route = FactoryLayout.toRoute(FactoryLayout.Default) })
-	local plot, origin, conveyor = createPlaceholderPlot(player)
+	local plot, origin, conveyor = createIslandPlot(player, plotIndex)
 	local factory = {
 		simulation = simulation,
 		plot = plot,
 		conveyor = conveyor,
 		origin = origin,
+		plotIndex = plotIndex,
 		layout = FactoryLayout.copy(FactoryLayout.Default),
 		capacity = 1,
 		inventory = {},
@@ -575,6 +584,22 @@ local function createFactory(player: Player)
 		announcedSale = false,
 	}
 	factories[player] = factory
+	local world = workspace:FindFirstChild(IslandWorldConfig.MapKey)
+	local island = if world then world:FindFirstChild(string.format("StarterIsland_%02d", plotIndex)) else nil
+	local islandSpawn = if island then island:FindFirstChild("IslandSpawn") else nil
+	if islandSpawn and islandSpawn:IsA("SpawnLocation") then
+		islandSpawn.Enabled = true
+		player.RespawnLocation = islandSpawn
+		island:SetAttribute("OwnerUserId", player.UserId)
+	end
+	local function placeCharacter(character: Model)
+		local root = character:WaitForChild("HumanoidRootPart", 10)
+		if root and factories[player] == factory and character.Parent then
+			character:PivotTo(CFrame.new(origin + Vector3.new(15, 4, 15)))
+		end
+	end
+	factory.characterConnection = player.CharacterAdded:Connect(placeCharacter)
+	if player.Character then task.spawn(placeCharacter, player.Character) end
 	refreshMachineVisuals(factory)
 	updateDebugAttributes(player, factory)
 end
@@ -582,6 +607,16 @@ end
 local function removeFactory(player: Player)
 	local factory = factories[player]
 	if factory then
+		occupiedPlots[factory.plotIndex] = nil
+		if factory.characterConnection then factory.characterConnection:Disconnect() end
+		player.RespawnLocation = nil
+		local world = workspace:FindFirstChild(IslandWorldConfig.MapKey)
+		local island = if world then world:FindFirstChild(string.format("StarterIsland_%02d", factory.plotIndex)) else nil
+		if island then
+			island:SetAttribute("OwnerUserId", nil)
+			local spawn = island:FindFirstChild("IslandSpawn")
+			if spawn and spawn:IsA("SpawnLocation") then spawn.Enabled = false end
+		end
 		factory.plot:Destroy()
 		factories[player] = nil
 	end
@@ -726,6 +761,13 @@ function FactoryService.start()
 		local shouldUpdateVisuals = visualUpdateAccumulator >= VISUAL_UPDATE_INTERVAL_SECONDS
 		if shouldUpdateVisuals then visualUpdateAccumulator %= VISUAL_UPDATE_INTERVAL_SECONDS end
 		for player, factory in pairs(factories) do
+			local character = player.Character
+			local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+			if root and root:IsA("BasePart") and root.Position.Y < IslandWorldConfig.WaterY - 10 then
+				root.AssemblyLinearVelocity = Vector3.zero
+				root.AssemblyAngularVelocity = Vector3.zero
+				character:PivotTo(CFrame.new(factory.origin + Vector3.new(15, 4, 15)))
+			end
 			if not dataIsReady(player) then continue end
 			local produced = factory.simulation:step(deltaTime)
 			local sold = if shouldUpdateVisuals then updateVisualItems(player, factory) else false
