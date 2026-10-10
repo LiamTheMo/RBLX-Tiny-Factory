@@ -5,13 +5,6 @@ on:
     branches:
       - main
       - 'v[0-9].[0-9][0-9]'
-  workflow_dispatch:
-    inputs:
-      publish:
-        description: Publish the validated main build to the configured Roblox target
-        required: true
-        default: false
-        type: boolean
 
 concurrency:
   group: tiny-factory-${{ github.workflow }}-${{ github.ref }}
@@ -83,74 +76,21 @@ jobs:
           grep -q "PrototypeSpawn" /tmp/TinyFactoryValidation.rbxlx
           grep -q "LootService" /tmp/TinyFactoryValidation.rbxlx
 
-  publish:
-    name: Publish validated main build
+      - name: Validate code-only target mappings
+        run: python3 scripts/roblox_cloud_sync.py --check
+
+  sync:
+    name: Sync existing Tiny Factory scripts from main (no place publishing)
     needs: validate
-    if: >-
-      github.ref == 'refs/heads/main' &&
-      ((github.event_name == 'workflow_dispatch' && inputs.publish == true) ||
-       github.event_name == 'push')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - name: Check out main
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          ref: main
           persist-credentials: false
-
-      - name: Set up Rokit toolchain
-        uses: CompeyDev/setup-rokit@v0.1.2
-        with:
-          version: v1.2.0
-
-      - name: Build Tiny Factory place
-        shell: bash
-        run: rojo build default.project.json --output TinyFactory.rbxlx
-
-      - name: Verify Roblox target
+      - name: Preflight and sync only existing scripts in the selected place
         env:
           ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
           ROBLOX_UNIVERSE_ID: ${{ secrets.ROBLOX_UNIVERSE_ID }}
           ROBLOX_PLACE_ID: ${{ secrets.ROBLOX_PLACE_ID }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "$ROBLOX_API_KEY" || { echo "ROBLOX_API_KEY secret is missing"; exit 1; }
-          test -n "$ROBLOX_UNIVERSE_ID" || { echo "ROBLOX_UNIVERSE_ID secret is missing"; exit 1; }
-          test -n "$ROBLOX_PLACE_ID" || { echo "ROBLOX_PLACE_ID secret is missing"; exit 1; }
-          curl --fail --silent --show-error \
-            --header "x-api-key: $ROBLOX_API_KEY" \
-            "https://apis.roblox.com/cloud/v2/universes/$ROBLOX_UNIVERSE_ID/places/$ROBLOX_PLACE_ID" \
-            --output place-response.json
-
-      - name: Publish Tiny Factory
-        env:
-          ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
-          ROBLOX_UNIVERSE_ID: ${{ secrets.ROBLOX_UNIVERSE_ID }}
-          ROBLOX_PLACE_ID: ${{ secrets.ROBLOX_PLACE_ID }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          for attempt in 1 2 3 4 5; do
-            if [[ "$attempt" -gt 1 ]]; then
-              sleep $(( (attempt - 1) * 30 ))
-            fi
-            response_file="publish-response-$attempt.json"
-            http_code=$(curl --silent --show-error \
-              --output "$response_file" \
-              --write-out "%{http_code}" \
-              --request POST \
-              --header "x-api-key: $ROBLOX_API_KEY" \
-              --header "Content-Type: application/xml" \
-              --data-binary @TinyFactory.rbxlx \
-              "https://apis.roblox.com/universes/v1/$ROBLOX_UNIVERSE_ID/places/$ROBLOX_PLACE_ID/versions?versionType=Published")
-            echo "Publish attempt $attempt: HTTP $http_code"
-            if [[ "$http_code" -ge 200 && "$http_code" -lt 300 ]]; then
-              exit 0
-            fi
-            if [[ "$http_code" != "409" && "$http_code" != "429" && ! "$http_code" =~ ^5 ]]; then
-              cat "$response_file"
-              exit 1
-            fi
-          done
-          exit 1
+        run: python3 scripts/roblox_cloud_sync.py --deploy
