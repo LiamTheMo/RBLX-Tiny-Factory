@@ -58,7 +58,9 @@ for _, spec in ipairs(specs) do
     elseif i == #spec.path then
       assert(child.ClassName == spec.kind, "Script class mismatch at " .. key)
     else
-      assert(child:IsA("Folder") or child:IsA("LuaSourceContainer"),
+      local isStarterScripts = key == "StarterPlayer/StarterPlayerScripts"
+        and child.ClassName == "StarterPlayerScripts"
+      assert(isStarterScripts or child:IsA("Folder") or child:IsA("LuaSourceContainer"),
         "Non-code ancestor collision at " .. key)
     end
     obj = child
