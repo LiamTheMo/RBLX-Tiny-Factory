@@ -1,6 +1,6 @@
 # Tiny Factory prototype
 
-The temporary factory has three machine areas followed by a dedicated Seller Bay. The belt, rails, machine models, and moving cubes share one conveyor elevation setting, while the plot and ground stay at their original height. The cube route now takes 1.15 seconds per logical segment. Clicking a machine area opens only owned droppers or upgraders suitable for that area; clicking the Seller Bay opens only owned sellers. The Inventory button has a Machines tab with Droppers, Upgraders, and Sellers sections and a Boosters tab for collected item modifiers.
+The island factory has a dropper area, three processor areas and a dedicated Seller Bay. The belt, rails, machine models, and moving cubes share one conveyor elevation setting, while the plot and ground stay at their original height. The cube route now takes 1.15 seconds per logical segment. Clicking a machine area opens only owned droppers or upgraders suitable for that area; clicking the Seller Bay opens only owned sellers. The Inventory button has a Machines tab with Droppers, Upgraders, and Sellers sections and a Boosters tab for collected item modifiers.
 
 Players roll machines for free every three seconds, buy limited capacity with Coins, and pick up world boosters by Humanoid touch. Pickups go into a bounded, saved booster inventory; players choose when to use a Coin or temporary Luck booster from the Boosters tab. The server validates both pickup and use. New booster definitions and effects belong in `BoosterConfig` and the server effect dispatcher.
 
@@ -21,7 +21,7 @@ The roll reveal uses transparent full-screen presentation labels with no filled 
 
 ## Workspace and 3D assets
 
-default.project.json includes Workspace and src/workspace. The baseplate and spawn are in the Rojo project, so a built place contains them without relying on a manually saved Studio scene. Future Studio-exported .rbxm or .rbxmx models can go in src/workspace and will be included by Rojo and the main-only publish workflow.
+default.project.json includes Workspace and src/workspace. The Rojo project includes IslandWorldBuilder and IslandWorldConfig; the server creates the six-island scene before gameplay starts. The prototype baseplate and spawn have been replaced. See v1.00/Island-Map-Validation.md for Studio evidence and remaining acceptance checks. Future Studio-exported .rbxm or .rbxmx models can go in src/workspace and will be included by Rojo and the main-only publish workflow.
 
 Raw .obj files are source art, not Rojo place instances. Roblox Studio's Importer accepts OBJ, while Roblox Open Cloud Model uploads accept FBX, GLTF, and GLB. For a Git-managed custom model, import it in Studio and commit its Roblox model export, or convert OBJ to GLB and use a separately validated asset-upload step. Mesh assets still need Roblox ownership, moderation, and usable IDs. The current prototype does not load the optional 3D showcase or require imported custom models to publish.
 
