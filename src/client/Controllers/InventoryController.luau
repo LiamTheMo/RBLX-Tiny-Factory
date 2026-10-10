@@ -18,18 +18,21 @@ local MACHINE_SECTIONS = {
 	{ Category = "Seller", Title = "Sellers" },
 }
 
+local UI = require(script.Parent.AmberUI)
+local Layout = require(Shared.AmberLayout)
+local ModelBuilder = require(Shared.MachineModelBuilder)
 local InventoryController = {}
 local started = false
-local openPanel: ((string, number?) -> ())? = nil
+local openPanel: ((string, number?, string?) -> ())? = nil
 local closePanel: (() -> ())? = nil
 
 local COLORS = {
-	Panel = Color3.fromRGB(30, 27, 35),
-	Row = Color3.fromRGB(46, 42, 52),
+	Panel = UI.Panel,
+	Row = UI.Panel,
 	Button = Color3.fromRGB(68, 61, 77),
 	Accent = Color3.fromRGB(255, 210, 128),
-	Text = Color3.fromRGB(248, 245, 250),
-	Muted = Color3.fromRGB(195, 190, 204),
+	Text = UI.Text,
+	Muted = UI.Muted,
 	Good = Color3.fromRGB(155, 230, 166),
 	Bad = Color3.fromRGB(255, 155, 145),
 }
@@ -67,6 +70,7 @@ local function makeButton(parent: Instance, name: string, text: string): TextBut
 	button.TextWrapped = true
 	button.AutoButtonColor = true
 	button.Parent = parent
+	UI.skin(button, "Tab")
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 9)
 	corner.Parent = button
@@ -81,15 +85,15 @@ end
 
 local function clearRows(parent: Instance)
 	for _, child in ipairs(parent:GetChildren()) do
-		if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
+		if not child:IsA("UIListLayout") and not child:IsA("UIGridLayout") and not child:IsA("UIPadding") then
 			child:Destroy()
 		end
 	end
 end
 
-function InventoryController.openInventory()
+function InventoryController.openInventory(category: string?)
 	if openPanel then
-		openPanel("Inventory", nil)
+		openPanel("Inventory", nil, category)
 	end
 end
 
@@ -126,12 +130,15 @@ function InventoryController.start()
 	screenGui.Name = "FactoryInventoryHud"
 	screenGui.ResetOnSpawn = false
 	screenGui.DisplayOrder = 15
+	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 	screenGui.Parent = playerGui
 
 	local inventoryButton = makeButton(screenGui, "InventoryButton", "Inventory")
 	inventoryButton.Size = UDim2.fromOffset(136, 40)
 	inventoryButton.BackgroundColor3 = COLORS.Panel
 	inventoryButton.TextSize = 14
+	inventoryButton.Text = ""
+	UI.asset(inventoryButton.AmberBackground, "Inventory")
 
 	local panel = Instance.new("Frame")
 	panel.Name = "MachinePanel"
@@ -142,10 +149,11 @@ function InventoryController.start()
 	panel.BorderSizePixel = 0
 	panel.Visible = false
 	panel.Parent = screenGui
+	UI.skin(panel, "Panel")
 	addCorner(panel, 16)
 	local panelStroke = Instance.new("UIStroke")
 	panelStroke.Color = Color3.fromRGB(120, 108, 137)
-	panelStroke.Transparency = 0.35
+	panelStroke.Transparency = 1
 	panelStroke.Thickness = 1
 	panelStroke.Parent = panel
 
@@ -154,12 +162,17 @@ function InventoryController.start()
 	title.Size = UDim2.new(1, -76, 0, 28)
 	title.Font = Enum.Font.GothamBold
 	title.TextColor3 = COLORS.Accent
-	title.TextSize = 19
+	title.TextSize = 28
+	local chest = UI.image(panel, "Chest")
+	chest.Position = UDim2.fromOffset(24, 12)
+	chest.Size = UDim2.fromOffset(44, 44)
 
 	local closeButton = makeButton(panel, "CloseButton", "×")
 	closeButton.Position = UDim2.new(1, -50, 0, 9)
 	closeButton.Size = UDim2.fromOffset(38, 34)
 	closeButton.TextSize = 20
+	closeButton.Text = ""
+	UI.asset(closeButton.AmberBackground, "Close")
 
 	local subtitle = makeLabel(panel, "Subtitle", "")
 	subtitle.Position = UDim2.fromOffset(18, 42)
@@ -196,14 +209,32 @@ function InventoryController.start()
 	listPadding.PaddingRight = UDim.new(0, 2)
 	listPadding.PaddingTop = UDim.new(0, 2)
 	listPadding.Parent = list
-	local listLayout = Instance.new("UIListLayout")
-	listLayout.Padding = UDim.new(0, 6)
+	local listLayout = Instance.new("UIGridLayout")
+	listLayout.CellPadding = UDim2.fromOffset(8, 10)
+	listLayout.CellSize = UDim2.new(1/3, -9, 0, 280)
 	listLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	listLayout.Parent = list
 
 	local state: any = nil
+	local landscapeCompact = false
+	local panelScale = Instance.new("UIScale")
+	panelScale.Parent = panel
 	local mode = "Inventory"
 	local activeTab = "Machines"
+	local activeCategory = "Producer"
+	local categoryTabs: { [string]: TextButton } = { Producer = machinesTab, Booster = boostersTab }
+	for _, section in ipairs(MACHINE_SECTIONS) do
+		if section.Category ~= "Producer" then
+			categoryTabs[section.Category] = makeButton(panel, section.Category .. "Tab", section.Title)
+		end
+	end
+	machinesTab.Text = "Droppers"
+	for key, button in pairs(categoryTabs) do
+		local icon = UI.image(button, key)
+		icon.Position = UDim2.fromScale(0.06, 0.23)
+		icon.Size = UDim2.fromScale(0.22, 0.5)
+		UI.caption(button, 0.28)
+	end
 	local targetSlot: number? = nil
 
 	local function setStatus(message: string, success: boolean?)
@@ -275,14 +306,6 @@ function InventoryController.start()
 		return ids, totals, placed, available
 	end
 
-	local function makeSection(titleText: string, order: number)
-		local heading = makeLabel(list, "Section_" .. titleText, titleText)
-		heading.LayoutOrder = order
-		heading.Size = UDim2.new(1, -12, 0, 28)
-		heading.Font = Enum.Font.GothamBold
-		heading.TextColor3 = COLORS.Accent
-		heading.TextSize = 15
-	end
 
 	local render: () -> ()
 	local function refresh()
@@ -297,59 +320,103 @@ function InventoryController.start()
 
 	local function makeRow(machineId: string, rowIndex: number, isPlacement: boolean, availableCount: number, placedCount: number, totalCount: number, actionText: string?, actionEnabled: boolean, action: (() -> ())?, detailOverride: string?): Frame
 		local definition = MachineDefinitions.get(machineId)
-		local rarity = definition and definition.Rarity or "Unknown"
-		local name = definition and definition.DisplayName or machineId
-		local rarityColor = rarityColors[rarity] or COLORS.Text
-
 		local row = Instance.new("Frame")
-		row.Name = if isPlacement then string.format("Place_%s_%d", machineId, rowIndex) else string.format("Owned_%s", machineId)
+		row.Name = if isPlacement then string.format("Place_%s_%d", machineId, rowIndex) else "Owned_" .. machineId
 		row.LayoutOrder = rowIndex
-		row.Size = UDim2.new(1, -8, 0, if isPlacement then 78 else 88)
-		row.BackgroundColor3 = COLORS.Row
-		row.BorderSizePixel = 0
 		row.Parent = list
-		addCorner(row, 10)
-
-		local nameLabel = makeLabel(row, "MachineName", name)
-		nameLabel.Position = UDim2.fromOffset(10, 5)
-		nameLabel.Size = if actionText then UDim2.new(1, -112, 0, 21) else UDim2.new(1, -20, 0, 21)
+		UI.skin(row, if isPlacement and actionEnabled then "SelectedCard" else "Card")
+		local viewport = Instance.new("ViewportFrame")
+		viewport.Name = "MachinePreview"
+		viewport.BackgroundTransparency = 1
+		viewport.Position = UDim2.fromScale(0.09, 0.06)
+		viewport.Size = UDim2.fromScale(0.82, 0.43)
+		viewport.Ambient = Color3.fromRGB(220, 209, 189)
+		viewport.LightColor = Color3.fromRGB(255, 239, 210)
+		viewport.LightDirection = Vector3.new(-1, -1, -1)
+		viewport.Parent = row
+		if definition then
+			local world = Instance.new("WorldModel")
+			world.Parent = viewport
+			local model = ModelBuilder.build(world, Vector3.zero, 1, definition)
+			for _, child in ipairs(model:GetDescendants()) do
+				if child:IsA("BasePart") and child.Transparency == 1 then child:Destroy() end
+			end
+			local box, size = model:GetBoundingBox()
+			local camera = Instance.new("Camera")
+			camera.FieldOfView = 35
+			local distance = math.max(size.X, size.Y, size.Z) * 2.3
+			camera.CFrame = CFrame.lookAt(box.Position + Vector3.new(-distance, distance * 0.65, -distance), box.Position)
+			camera.Parent = viewport
+			viewport.CurrentCamera = camera
+		end
+		local nameLabel = makeLabel(row, "MachineName", definition and definition.DisplayName or machineId)
+		nameLabel.Position = UDim2.fromScale(0.07, 0.48)
+		nameLabel.Size = UDim2.fromScale(0.86, 0.09)
+		nameLabel.TextXAlignment = Enum.TextXAlignment.Center
 		nameLabel.Font = Enum.Font.GothamBold
-		nameLabel.TextColor3 = rarityColor
-		nameLabel.TextSize = 14
-		nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-
-		local countText = if detailOverride then detailOverride elseif isPlacement
-			then string.format("%s · Available ×%d", rarity, availableCount)
-			else string.format("%s %s · Owned %d · Placed %d · Available %d", rarity, definition and definition.Category or "Machine", totalCount, placedCount, availableCount)
-		local details = makeLabel(row, "MachineDetails", countText)
-		details.Position = UDim2.fromOffset(10, 27)
-		details.Size = if actionText then UDim2.new(1, -112, 0, 20) else UDim2.new(1, -20, 0, 20)
+		nameLabel.TextSize = 15
+		local rarity = definition and definition.Rarity or "Common"
+		if UI.Assets[rarity] then
+			local badge = UI.image(row, rarity)
+			badge.Position = UDim2.fromScale(0.18, 0.55)
+			badge.Size = UDim2.fromScale(0.64, 0.14)
+			badge.ScaleType = Enum.ScaleType.Stretch
+		else
+			local badge = makeLabel(row, "Rarity", rarity)
+			badge.Position = UDim2.fromScale(0.1, 0.56)
+			badge.Size = UDim2.fromScale(0.8, 0.12)
+			badge.TextColor3 = rarityColors[rarity] or COLORS.Text
+		end
+		local odds = if definition and definition.Rollable then EconomyRules.getMachineOddsLabel(machineId, MachineDefinitions.getRollPool()) else "Starter"
+		local oddsLabel = makeLabel(row, "RollOdds", odds or "")
+		oddsLabel.Position = UDim2.fromScale(0.1, 0.68)
+		oddsLabel.Size = UDim2.fromScale(0.8, 0.07)
+		oddsLabel.TextXAlignment = Enum.TextXAlignment.Center
+		local details = makeLabel(row, "MachineDetails", string.format("Owned %d  ·  Placed %d  ·  Free %d", totalCount, placedCount, availableCount))
+		details.Position = UDim2.fromScale(0.07, 0.76)
+		details.Size = UDim2.fromScale(0.86, 0.065)
+		details.TextSize = 10
+		details.TextXAlignment = Enum.TextXAlignment.Center
 		details.TextColor3 = COLORS.Muted
-		details.TextSize = 11
-		details.TextTruncate = Enum.TextTruncate.AtEnd
-
-		local description = makeLabel(row, "Description", definition and definition.Description or "This item is not in the current machine catalog.")
-		description.Position = UDim2.fromOffset(10, 48)
-		description.Size = if actionText then UDim2.new(1, -112, 0, if isPlacement then 24 else 33) else UDim2.new(1, -20, 0, if isPlacement then 24 else 33)
-		description.TextColor3 = COLORS.Muted
-		description.TextSize = 10
-		description.TextYAlignment = Enum.TextYAlignment.Top
-		description.TextTruncate = Enum.TextTruncate.AtEnd
-
+		if isPlacement then details.Text = detailOverride or details.Text end
+		row:SetAttribute("Description", definition and definition.Description or "")
 		if actionText then
 			local button = makeButton(row, "ActionButton", actionText)
-			button.AnchorPoint = Vector2.new(1, 0.5)
-			button.Position = UDim2.new(1, -8, 0.5, 0)
-			button.Size = UDim2.fromOffset(94, 34)
+			UI.asset(button.AmberBackground, "Action")
+			button.Position = UDim2.fromScale(0.08, 0.83)
+			button.Size = UDim2.new(0.84, 0, 0, 44)
+			button.Position = UDim2.new(0.08, 0, 1, -54)
+			button.TextColor3 = COLORS.Panel
 			button.Active = actionEnabled
-			button.AutoButtonColor = actionEnabled
-			button.BackgroundColor3 = if actionEnabled then COLORS.Button else Color3.fromRGB(66, 63, 70)
-			button.TextColor3 = if actionEnabled then COLORS.Text else COLORS.Muted
+			local confirmed = false
 			button.Activated:Connect(function()
-				if actionEnabled and action then
-					action()
+				if actionText == "Recycle" and not confirmed then
+					confirmed = true
+					button.Text = "Confirm recycle"
+					return
 				end
+				if actionEnabled and action then action() end
 			end)
+		end
+		if landscapeCompact then
+			viewport.Position = UDim2.fromScale(0.04, 0.06)
+			viewport.Size = UDim2.fromScale(0.36, 0.78)
+			nameLabel.Position = UDim2.fromScale(0.43, 0.09)
+			nameLabel.Size = UDim2.fromScale(0.53, 0.16)
+			local badge = row:FindFirstChild(rarity .. "Artwork") or row:FindFirstChild("Rarity")
+			if badge and badge:IsA("GuiObject") then
+				badge.Position = UDim2.fromScale(0.48, 0.26)
+				badge.Size = UDim2.fromScale(0.43, 0.17)
+			end
+			oddsLabel.Position = UDim2.fromScale(0.43, 0.45)
+			oddsLabel.Size = UDim2.fromScale(0.53, 0.12)
+			details.Position = UDim2.fromScale(0.43, 0.58)
+			details.Size = UDim2.fromScale(0.53, 0.09)
+			local button = row:FindFirstChild("ActionButton")
+			if button and button:IsA("TextButton") then
+				button.Position = UDim2.new(0.43, 0, 1, -54)
+				button.Size = UDim2.new(0.53, 0, 0, 44)
+			end
 		end
 		return row
 	end
@@ -363,19 +430,18 @@ function InventoryController.start()
 			return
 		end
 
-		boostersTab.Visible = mode == "Inventory"
-		machinesTab.Visible = mode == "Inventory"
-		machinesTab.BackgroundColor3 = if activeTab == "Machines" then COLORS.Accent else COLORS.Button
-		machinesTab.TextColor3 = if activeTab == "Machines" then COLORS.Panel else COLORS.Text
-		boostersTab.BackgroundColor3 = if activeTab == "Boosters" then COLORS.Accent else COLORS.Button
-		boostersTab.TextColor3 = if activeTab == "Boosters" then COLORS.Panel else COLORS.Text
+		for category, button in pairs(categoryTabs) do
+			button.Visible = mode == "Inventory"
+			local selected = if category == "Booster" then activeTab == "Boosters" else activeTab == "Machines" and activeCategory == category
+			UI.asset(button.AmberBackground, if selected then "SelectedTab" else "Tab")
+		end
 
 		local ids, totals, placed, available = getCounts()
 		local ownedCount = 0
 		for _, count in pairs(totals) do
 			ownedCount += count
 		end
-		inventoryButton.Text = string.format("Inventory · %d", ownedCount)
+		inventoryButton:SetAttribute("OwnedCount", ownedCount)
 		local visibleRowCount = 0
 
 		if mode == "Placement" and targetSlot then
@@ -472,24 +538,27 @@ function InventoryController.start()
 						local row = Instance.new("Frame")
 						row.Name = "Booster_" .. booster.Id
 						row.LayoutOrder = rowIndex
-						row.Size = UDim2.new(1, -8, 0, 70)
+						row.Size = UDim2.new(1, -8, 0, 280)
 						row.BackgroundColor3 = COLORS.Row
 						row.BorderSizePixel = 0
 						row.Parent = list
-						addCorner(row, 10)
+						UI.skin(row, "Card")
+						local potion = UI.image(row, "Booster")
+						potion.Position = UDim2.fromScale(0.2, 0.06)
+						potion.Size = UDim2.fromScale(0.6, 0.43)
 						local nameLabel = makeLabel(row, "BoosterName", booster.DisplayName)
-						nameLabel.Position = UDim2.fromOffset(10, 8)
-						nameLabel.Size = UDim2.new(1, -116, 0, 24)
+						nameLabel.Position = UDim2.fromScale(0.08, 0.50)
+						nameLabel.Size = UDim2.fromScale(0.84, 0.14)
 						nameLabel.Font = Enum.Font.GothamBold
 						nameLabel.TextColor3 = Color3.fromRGB(booster.Color[1], booster.Color[2], booster.Color[3])
 						local detail = makeLabel(row, "BoosterDetails", string.format("Owned ×%d · %s", count, booster.Effect.Kind))
-						detail.Position = UDim2.fromOffset(10, 36)
-						detail.Size = UDim2.new(1, -116, 0, 20)
+						detail.Position = UDim2.fromScale(0.08, 0.66)
+						detail.Size = UDim2.fromScale(0.84, 0.12)
 						detail.TextColor3 = COLORS.Muted
 						local button = makeButton(row, "UseButton", "Use")
 						button.AnchorPoint = Vector2.new(1, 0.5)
-						button.Position = UDim2.new(1, -8, 0.5, 0)
-						button.Size = UDim2.fromOffset(94, 34)
+						button.Position = UDim2.fromScale(0.92, 0.89)
+						button.Size = UDim2.fromScale(0.84, 0.16)
 						button.Activated:Connect(function()
 							local response = invoke(useBooster, booster.Id)
 							if response and response.Success then
@@ -507,11 +576,10 @@ function InventoryController.start()
 				local rowIndex = 0
 				local rollPool = MachineDefinitions.getRollPool()
 				for _, section in ipairs(MACHINE_SECTIONS) do
-					rowIndex += 1
-					makeSection(section.Title, rowIndex)
+
 					for _, machineId in ipairs(ids) do
 						local definition = MachineDefinitions.get(machineId)
-						if definition and definition.Category == section.Category then
+						if definition and definition.Category == section.Category and definition.Category == activeCategory then
 							rowIndex += 1
 							local count = available[machineId] or 0
 							local actionText: string? = nil
@@ -531,7 +599,41 @@ function InventoryController.start()
 							local odds = if definition.Rollable then EconomyRules.getMachineOddsLabel(machineId, rollPool) else nil
 							local detail = string.format("%s %s · Owned %d · Placed %d · Available %d", definition.Rarity, definition.Category, totals[machineId] or 0, placed[machineId] or 0, count)
 							if odds then detail ..= string.format(" · %s", odds) end
-							makeRow(machineId, rowIndex, false, count, placed[machineId] or 0, totals[machineId] or 0, actionText, count > 0, action, detail)
+							local row = makeRow(machineId, rowIndex, false, count, placed[machineId] or 0, totals[machineId] or 0, actionText, count > 0, action, detail)
+							if count > 0 then
+								local place = makeButton(row, "PlaceButton", "Place")
+								UI.asset(place.AmberBackground, "Action")
+								place.TextColor3 = COLORS.Panel
+								place.Position = UDim2.fromScale(0.08, 0.83)
+								place.Size = UDim2.new(if actionText then 0.52 else 0.84, 0, 0, 44)
+								place.Position = UDim2.new(0.08, 0, 1, -54)
+								if actionText then
+									row.ActionButton.Position = UDim2.new(0.61, 0, 1, -54)
+									row.ActionButton.Size = UDim2.new(0.31, 0, 0, 44)
+									row.ActionButton.TextSize = 9
+								end
+								if landscapeCompact then
+									place.Position = UDim2.new(0.43, 0, 1, -54)
+									place.Size = UDim2.new(if actionText then 0.31 else 0.53, 0, 0, 44)
+									if actionText then
+										row.ActionButton.Position = UDim2.new(0.75, 0, 1, -54)
+										row.ActionButton.Size = UDim2.new(0.21, 0, 0, 44)
+									end
+								end
+								place.Activated:Connect(function()
+									mode = "AreaSelection"
+									clearRows(list)
+									title.Text = "Choose area"
+									subtitle.Text = definition.Description
+									for slot = 1, state.SlotCount do
+										if FactoryLayout.expectedCategoryForSlot(slot) == definition.Category then
+											local area = makeButton(list, "Area_" .. slot, FactoryLayout.getAreaLabel(slot))
+											area.LayoutOrder = slot
+											area.Activated:Connect(function() InventoryController.openPlacement(slot) end)
+										end
+									end
+								end)
+							end
 							visibleRowCount += 1
 						end
 					end
@@ -548,13 +650,14 @@ function InventoryController.start()
 		end
 	end
 
-	openPanel = function(nextMode: string, slotIndex: number?)
+	openPanel = function(nextMode: string, slotIndex: number?, category: string?)
 		if nextMode == "Placement" and not FactoryLayout.isEditableMachineSlot(slotIndex) then
 			setStatus("Select a valid factory area first.", false)
 			return
 		end
 		mode = nextMode
-		activeTab = "Machines"
+		activeCategory = if category and categoryTabs[category] then category else "Producer"
+		activeTab = if category == "Booster" then "Boosters" else "Machines"
 		targetSlot = if nextMode == "Placement" then slotIndex else nil
 		panel.Visible = true
 		refresh()
@@ -572,10 +675,23 @@ function InventoryController.start()
 	end)
 	machinesTab.Activated:Connect(function()
 		activeTab = "Machines"
+		activeCategory = "Producer"
+		mode = "Inventory"
 		render()
 	end)
+	for category, button in pairs(categoryTabs) do
+		if category ~= "Producer" and category ~= "Booster" then
+			button.Activated:Connect(function()
+				activeCategory = category
+				activeTab = "Machines"
+				mode = "Inventory"
+				render()
+			end)
+		end
+	end
 	boostersTab.Activated:Connect(function()
 		activeTab = "Boosters"
+		mode = "Inventory"
 		render()
 	end)
 	closeButton.Activated:Connect(function()
@@ -584,21 +700,55 @@ function InventoryController.start()
 
 	local camera = workspace.CurrentCamera
 	local function layout(viewportSize: Vector2)
-		local compact = viewportSize.X < 760 or (UserInputService.TouchEnabled and viewportSize.X < 1000)
-		inventoryButton.Position = if compact then UDim2.fromOffset(8, 170) else UDim2.fromOffset(16, 16)
-		local width = math.max(280, math.min(620, viewportSize.X - 28))
-		local height = math.max(240, math.min(520, viewportSize.Y - 28))
+		if screenGui.AbsoluteSize.X > 0 then viewportSize = screenGui.AbsoluteSize end
+		local metrics = Layout.measure(viewportSize.X, viewportSize.Y)
+		local scale = metrics.Scale
+		local width = metrics.PanelWidth / scale
+		local height = metrics.PanelHeight / scale
+		landscapeCompact = metrics.Landscape
+		panelScale.Scale = scale
+		panel.AnchorPoint = Vector2.new(1, 0)
+		panel.Position = UDim2.new(1, -8, 0, metrics.PanelTop)
 		panel.Size = UDim2.fromOffset(width, height)
-		title.Position = UDim2.fromOffset(18, 12)
-		title.Size = UDim2.new(1, -76, 0, 28)
-		closeButton.Position = UDim2.new(1, -50, 0, 9)
-		subtitle.Position = UDim2.fromOffset(18, 42)
-		subtitle.Size = UDim2.new(1, -36, 0, 22)
-		status.Position = UDim2.fromOffset(18, 66)
-		status.Size = UDim2.new(1, -36, 0, 24)
-		list.Position = UDim2.fromOffset(12, 136)
-		list.Size = UDim2.new(1, -24, 1, -148)
+		inventoryButton.AnchorPoint = Vector2.new(0, 1)
+		inventoryButton.Position = UDim2.new(0, 12, 1, -12)
+		inventoryButton.Size = UDim2.fromOffset(metrics.InventoryWidth, metrics.InventoryHeight)
+		local compact = metrics.Compact
+		title.Position = UDim2.fromOffset(if compact then 58 else 76, 12)
+		title.Size = UDim2.new(1, -110, 0, if compact then 34 else 44)
+		title.TextSize = if compact then 22 else 30
+		chest.Position = UDim2.fromOffset(20, 10)
+		chest.Size = UDim2.fromOffset(if compact then 34 else 44, if compact then 34 else 44)
+		closeButton.Position = UDim2.new(1, if compact then -54 else -110, 0, 10)
+		closeButton.Size = UDim2.fromOffset(44, 44)
+		subtitle.Visible = not compact
+		subtitle.Position = UDim2.fromOffset(20, 58)
+		subtitle.Size = UDim2.new(1, -40, 0, 20)
+		status.Position = UDim2.fromOffset(20, if compact then height - 28 else 122)
+		status.Size = UDim2.new(1, -40, 0, 20)
+		status.TextSize = 11
+		for index, key in ipairs({ "Producer", "Processor", "Seller", "Booster" }) do
+			local button = categoryTabs[key]
+			button.Position = UDim2.new((index - 1)/4, 12, 0, if compact then 48 else 80)
+			button.Size = UDim2.new(0.25, -15, 0, 44)
+			button.TextSize = if width < 470 then 10 else 14
+			button.Caption.TextWrapped = false
+			button.Caption.TextScaled = true
+			local limit = button.Caption:FindFirstChildOfClass("UITextSizeConstraint") or Instance.new("UITextSizeConstraint")
+			limit.MinTextSize = 8
+			limit.MaxTextSize = button.TextSize
+			limit.Parent = button.Caption
+		end
+		local listTop = if compact then 98 else 152
+		list.Position = UDim2.fromOffset(18, listTop)
+		list.Size = UDim2.new(1, -36, 1, -listTop - 36)
+		local columns = metrics.Columns
+		local cardWidth = (width - 48 - (columns - 1) * 8) / columns
+		listLayout.CellSize = UDim2.new(1 / columns, -10, 0, if landscapeCompact then 174 else math.max(240, cardWidth * 1.55))
+		if state then render() end
 	end
+	screenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() layout(screenGui.AbsoluteSize) end)
+
 	if camera then
 		layout(camera.ViewportSize)
 		camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
@@ -617,6 +767,7 @@ function InventoryController.start()
 	end)
 
 	refresh()
+	openPanel("Inventory", nil)
 end
 
 return InventoryController

@@ -2,12 +2,13 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local UserInputService = game:GetService("UserInputService")
 
 local NumberFormatter = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("NumberFormatter"))
 
 local EffectsController = require(script.Parent.EffectsController)
 
+local UI = require(script.Parent.AmberUI)
+local Layout = require(ReplicatedStorage.Shared.AmberLayout)
 local EconomyController = {}
 local started = false
 
@@ -16,7 +17,7 @@ local COLORS = {
 	Button = Color3.fromRGB(46, 39, 34),
 	Good = Color3.fromRGB(140, 235, 150),
 	Bad = Color3.fromRGB(255, 150, 120),
-	Text = Color3.fromRGB(255, 255, 255),
+	Text = UI.Text,
 	Accent = Color3.fromRGB(255, 194, 66),
 }
 
@@ -31,6 +32,7 @@ local function createButton(parent: Instance, name: string, text: string): TextB
 	button.TextWrapped = true
 	button.AutoButtonColor = true
 	button.Parent = parent
+	UI.skin(button, "Action")
 	return button
 end
 
@@ -52,6 +54,7 @@ function EconomyController.start()
 	screenGui.Name = "EconomyHud"
 	screenGui.ResetOnSpawn = false
 	screenGui.DisplayOrder = 10
+	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 	screenGui.Parent = playerGui
 
 	local panel = Instance.new("Frame")
@@ -60,10 +63,37 @@ function EconomyController.start()
 	panel.BackgroundTransparency = 0.08
 	panel.BorderSizePixel = 0
 	panel.Parent = screenGui
+	UI.skin(panel, "Panel")
+	panel.Visible = false
+	panel.ZIndex = 5
+	local settings = createButton(screenGui, "Settings", "")
+	UI.asset(settings.AmberBackground, "Settings")
+	settings.Size = UDim2.fromOffset(56, 56)
+	settings.Position = UDim2.new(1, -70, 0, 12)
+	local settingsGui = Instance.new("ScreenGui")
+	settingsGui.Name = "AmberSettings"
+	settingsGui.ResetOnSpawn = false
+	settingsGui.DisplayOrder = 18
+	settingsGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+	settingsGui.Parent = playerGui
+	panel.Parent = settingsGui
+	settings.Parent = settingsGui
+	settings.Activated:Connect(function() panel.Visible = not panel.Visible end)
+	local coins = Instance.new("Frame")
+	coins.Name = "CoinHud"
+	coins.Parent = screenGui
+	UI.skin(coins, "Coins")
+	local coinIcon = UI.image(coins, "Coin")
+	coinIcon.Position = UDim2.fromScale(0.08, 0.2)
+	coinIcon.Size = UDim2.fromScale(0.23, 0.6)
+	local balance = UI.label(coins, "Balance", "Loading...")
+	balance.Position = UDim2.fromScale(0.33, 0.2)
+	balance.Size = UDim2.fromScale(0.57, 0.6)
+	balance.TextScaled = true
 
 	local title = Instance.new("TextLabel")
 	title.BackgroundTransparency = 1
-	title.Text = "Factory economy"
+	title.Text = "Settings & capacity"
 	title.TextColor3 = COLORS.Accent
 	title.Font = Enum.Font.GothamBold
 	title.TextSize = 17
@@ -96,7 +126,12 @@ function EconomyController.start()
 	rollDock.Parent = screenGui
 	local roll = createButton(rollDock, "Roll", "Roll")
 	roll.Font = Enum.Font.GothamBlack
-	roll.TextSize = 20
+	roll.TextSize = 30
+	UI.asset(roll.AmberBackground, "Roll")
+	local dice = UI.image(roll, "Dice")
+	dice.Position = UDim2.fromScale(0.19, 0.27)
+	dice.Size = UDim2.fromScale(0.18, 0.45)
+	UI.caption(roll, 0.32)
 	roll.BackgroundColor3 = COLORS.Accent
 	roll.TextColor3 = COLORS.Panel
 	local rollCorner = Instance.new("UICorner")
@@ -106,7 +141,6 @@ function EconomyController.start()
 
 
 	local state: any = nil
-	local compact = false
 	local cooldownEndAt = 0
 	local rolling = false
 
@@ -122,13 +156,15 @@ function EconomyController.start()
 		local remaining = math.max(0, cooldownEndAt - os.clock())
 		local ready = state ~= nil and state.DataReady == true
 		roll.Text = if rolling then "ROLLING..." elseif not ready then "FACTORY LOADING" elseif remaining > 0 then string.format("READY IN %.2fs", remaining) else "Roll"
-		roll.TextSize = if rolling then 16 else 20
+		roll.TextSize = if roll.Text == "Roll" then 30 else 13
 		roll.TextWrapped = false
 		roll.Active = ready and not rolling and remaining <= 0
 		roll.AutoButtonColor = roll.Active
-		roll.BackgroundTransparency = if rolling then 1 else 0
+		roll.BackgroundTransparency = 1
+		roll.AmberBackground.ImageTransparency = if rolling then 0.5 elseif roll.Active then 0 else 0.3
+		dice.Visible = roll.Text == "Roll"
 		roll.BackgroundColor3 = if roll.Active then COLORS.Accent else COLORS.Button
-		roll.TextColor3 = if roll.Active then COLORS.Panel else COLORS.Text
+		roll.TextColor3 = UI.Text
 		roll.TextStrokeColor3 = Color3.fromRGB(20, 24, 32)
 		roll.TextStrokeTransparency = if rolling then 0.2 else 1
 	end
@@ -177,6 +213,7 @@ function EconomyController.start()
 			return
 		end
 		status.Text = if state.DataReady then `Coins {NumberFormatter.format(state.Coins)}  |  Slots {state.Capacity}/{state.MaxCapacity}  |  Machines {state.InventoryCount or 0}/{state.MaxInventoryMachines or 200}` else (state.DataError or "Factory data is loading")
+		balance.Text = NumberFormatter.format(state.Coins)
 		updateLuckStatus()
 		capacity.Text = if state.CapacityCost then `Buy capacity · {NumberFormatter.format(state.CapacityCost)} Coins` else "Capacity MAX"
 	end
@@ -213,30 +250,34 @@ function EconomyController.start()
 	end)
 
 	local function layout(viewportWidth: number, viewportHeight: number)
-		compact = viewportWidth < 760 or (UserInputService.TouchEnabled and viewportWidth < 1000)
-		local compactLandscape = compact and viewportWidth > viewportHeight
-		local panelWidth = 300
-		if compact then
-			local widthRatio = if compactLandscape then 0.34 else 0.68
-			panelWidth = math.floor(math.clamp(viewportWidth * widthRatio, 232, 272))
-			panelWidth = math.min(panelWidth, math.max(184, viewportWidth - 16))
-		end
-		panel.Size = if compact then UDim2.fromOffset(panelWidth, 134) else UDim2.fromOffset(panelWidth, 148)
-		panel.Position = if compactLandscape or compact then UDim2.new(1, -panelWidth - 8, 0, 8) else UDim2.new(1, -316, 0, 16)
-		title.Position = UDim2.fromOffset(8, 8)
-		title.Size = UDim2.new(1, -16, 0, if compact then 24 else 26)
-		status.Position = UDim2.fromOffset(8, if compact then 34 else 36)
-		status.Size = UDim2.new(1, -16, 0, if compact then 30 else 24)
-		luckStatus.Position = UDim2.fromOffset(8, if compact then 64 else 62)
-		luckStatus.Size = UDim2.new(1, -16, 0, 16)
-		capacity.Position = UDim2.fromOffset(8, if compact then 92 else 96)
-		capacity.Size = UDim2.fromOffset(panelWidth - 16, if compact then 36 else 34)
-		rollDock.Size = UDim2.fromOffset(if compact then math.min(268, viewportWidth - 24) else 320, 72)
-		roll.Position = UDim2.fromOffset(8, 8)
-		roll.Size = UDim2.new(1, -16, 1, -16)
+		local safeSize = screenGui.AbsoluteSize
+		if safeSize.X > 0 and safeSize.Y > 0 then viewportWidth = safeSize.X; viewportHeight = safeSize.Y end
+		local metrics = Layout.measure(viewportWidth, viewportHeight)
+		coins.Position = UDim2.fromOffset(12, 8)
+		coins.Size = UDim2.fromOffset(metrics.CoinWidth, metrics.CoinHeight)
+		settings.Position = UDim2.fromOffset(metrics.SettingsX, 8)
+		settings.Size = UDim2.fromOffset(math.max(44, metrics.SettingsSize), math.max(44, metrics.SettingsSize))
+
+		panel.Size = UDim2.fromOffset(math.min(330, viewportWidth - 24), 228)
+		panel.Position = UDim2.new(1, -math.min(330, viewportWidth - 24) - 12, 0, 76)
+		title.Position = UDim2.fromOffset(16, 16)
+		title.Size = UDim2.new(1, -32, 0, 26)
+		status.Position = UDim2.fromOffset(16, 56)
+		status.Size = UDim2.new(1, -32, 0, 68)
+		luckStatus.Position = UDim2.fromOffset(16, 128)
+		luckStatus.Size = UDim2.new(1, -32, 0, 24)
+		capacity.Position = UDim2.fromOffset(16, 164)
+		capacity.Size = UDim2.new(1, -32, 0, 48)
+		rollDock.Size = UDim2.fromOffset(metrics.RollWidth, metrics.RollHeight)
+		rollDock.Position = UDim2.new(0, metrics.RollCenter, 1, -8)
+		roll.Position = UDim2.fromScale(0, 0)
+		roll.Size = UDim2.fromScale(1, 1)
 		render()
 	end
 
+	screenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+		layout(screenGui.AbsoluteSize.X, screenGui.AbsoluteSize.Y)
+	end)
 	local camera = workspace.CurrentCamera
 	if camera then
 		camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
