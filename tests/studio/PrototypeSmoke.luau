@@ -2,8 +2,8 @@
 -- The test uses an isolated play session and never publishes a place.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StudioTestService = game:GetService("StudioTestService")
-assert(workspace:FindFirstChild("PrototypeBaseplate"), "Rojo place is missing the baseplate")
-assert(workspace:FindFirstChild("PrototypeSpawn"), "Rojo place is missing the spawn")
+assert(game.ServerScriptService.Server.Services:FindFirstChild("IslandWorldBuilder"), "Rojo place is missing the island builder")
+assert(ReplicatedStorage.Shared:FindFirstChild("IslandWorldConfig"), "Rojo place is missing the island configuration")
 
 local resultEvent = Instance.new("RemoteEvent")
 resultEvent.Name = "PrototypeTestResult"
