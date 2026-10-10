@@ -87,7 +87,7 @@ jobs:
   sync:
     name: Publish Tiny Factory scripts from main (preserve Studio assets)
     needs: validate
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.ROBLOX_LIVE_PUBLISH_ENABLED == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
