@@ -80,6 +80,7 @@ jobs:
         run: |
           python3 scripts/roblox_cloud_sync.py --check
           python3 scripts/roblox_live_publish.py --check
+          python3 -m unittest discover -s tests -p 'test_cloud_live_publish.py'
 
   sync:
     name: Publish Tiny Factory scripts from main (preserve Studio assets)
